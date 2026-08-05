@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Containerised go. See scripts/bin/forge for why these shims exist.
+#
+# Module and build caches live under .scratch so nothing is written outside the
+# project tree and repeated runs stay fast.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Superset of the `go 1.25.1` directive in go/go.mod and go/tools/go.mod.
+GO_IMAGE="${GO_IMAGE:-golang:1.25.12}"
+
+RELATIVE_DIR="${PWD#"$PROJECT_DIR"}"
+
+mkdir -p "$PROJECT_DIR/.scratch/gocache/build" "$PROJECT_DIR/.scratch/gocache/mod"
+
+# The deploy tools read their configuration from the environment: the scripts
+# export it with `set -a; source .env`. Docker has no pass-everything flag, so
+# forward the names the tools actually read, and only when they are set.
+FORWARDED_NAMES=(
+    ADDRESSES_FILE CHAIN CHAIN_ID CHAIN_URL
+    DEPLOYMENT_PRIVATE_KEY EXTENSION_OWNER_KEY PROXY_PRIVATE_KEY
+    EXTENSION_ID EXTENSION_PORT SIGN_PORT INSTRUCTION_SENDER
+    EXT_PROXY_URL EXT_PROXY_HOST_URL NORMAL_PROXY_URL PROXY_CONFIG
+    GOVERNANCE_SIGNERS GOVERNANCE_THRESHOLD INITIAL_OWNER
+    LOCAL_MODE SIMULATED_TEE TEE_VERSION FEE_WEI LOG_LEVEL
+)
+ENV_ARGS=()
+for name in "${FORWARDED_NAMES[@]}"; do
+    if [[ -n "${!name-}" ]]; then
+        ENV_ARGS+=(--env "$name=${!name}")
+    fi
+done
+
+exec docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --network host \
+    --volume "$PROJECT_DIR:/project" \
+    --workdir "/project${RELATIVE_DIR}" \
+    --volume "$PROJECT_DIR/.scratch/gocache:/gocache" \
+    --env GOCACHE=/gocache/build \
+    --env GOMODCACHE=/gocache/mod \
+    --env GOFLAGS="${GOFLAGS:-}" \
+    "${ENV_ARGS[@]}" \
+    "$GO_IMAGE" go "$@"

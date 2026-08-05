@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Containerised forge.
+#
+# The deploy scripts call `forge` and `go` directly. Rather than installing
+# toolchains outside the project tree, these shims run the official images with
+# the project bind-mounted, so scripts/*.sh work unmodified. Put this directory
+# first on PATH:
+#
+#   export PATH="$PWD/scripts/bin:$PATH"
+#
+# Install real Foundry and Go if you prefer; the shims are then unnecessary and
+# can be dropped from PATH without touching anything else.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FOUNDRY_IMAGE="${FOUNDRY_IMAGE:-ghcr.io/foundry-rs/foundry:stable}"
+
+# Run at the same relative path inside the container as on the host, so a script
+# that cd'd into a subdirectory keeps working.
+RELATIVE_DIR="${PWD#"$PROJECT_DIR"}"
+
+mkdir -p "$PROJECT_DIR/.scratch/foundry-cache"
+
+exec docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --network host \
+    --volume "$PROJECT_DIR:/project" \
+    --workdir "/project${RELATIVE_DIR}" \
+    --env "FOUNDRY_CACHE_DIR=/project/.scratch/foundry-cache" \
+    --entrypoint forge \
+    "$FOUNDRY_IMAGE" "$@"

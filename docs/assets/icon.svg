@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="Kerb icon">
+  <!-- The redaction mark: a sealed strategy printed as censored strips.
+       Colors from the app token sheet: ember #E86A33, faint ink #78716C. -->
+  <rect x="28" y="20" width="48" height="14" rx="7" fill="#78716C"/>
+  <rect x="20" y="41" width="56" height="14" rx="7" fill="#E86A33"/>
+  <rect x="36" y="62" width="40" height="14" rx="7" fill="#78716C"/>
+</svg>
