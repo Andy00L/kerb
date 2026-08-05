@@ -32,11 +32,14 @@ for name in "${FORWARDED_NAMES[@]}"; do
     fi
 done
 
+# The project is mounted at its HOST path, not an alias like /project: the
+# deploy scripts absolutize paths (ADDRESSES_FILE) before the tool runs, and
+# those host-absolute paths must resolve identically inside the container.
 exec docker run --rm \
     --user "$(id -u):$(id -g)" \
     --network host \
-    --volume "$PROJECT_DIR:/project" \
-    --workdir "/project${RELATIVE_DIR}" \
+    --volume "$PROJECT_DIR:$PROJECT_DIR" \
+    --workdir "$PROJECT_DIR${RELATIVE_DIR}" \
     --volume "$PROJECT_DIR/.scratch/gocache:/gocache" \
     --env GOCACHE=/gocache/build \
     --env GOMODCACHE=/gocache/mod \

@@ -176,11 +176,19 @@ func sendInstruction(
 		return common.Hash{}, common.Hash{}, errors.Errorf("no logs found in %s receipt", methodName)
 	}
 
-	instructionSent, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
+	// The receipt carries logs from every contract the call touched: Kerb's
+	// own events (MandateCreated, MandateCancelled) sit next to the registry's
+	// TeeInstructionsSent, and their order depends on the method. Scan for the
+	// one that parses instead of assuming it comes first.
+	for _, receiptLog := range receipt.Logs {
+		instructionSent, parseErr := s.TeeVerification.ParseTeeInstructionsSent(*receiptLog)
+		if parseErr == nil {
+			return instructionSent.InstructionId, receipt.TxHash, nil
+		}
 	}
-	return instructionSent.InstructionId, receipt.TxHash, nil
+	return common.Hash{}, common.Hash{}, errors.Errorf(
+		"no TeeInstructionsSent event among the %d logs of the %s receipt", len(receipt.Logs), methodName,
+	)
 }
 
 // SendInitSeed delivers the encrypted enclave master seed.
