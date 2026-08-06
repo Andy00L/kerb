@@ -272,7 +272,9 @@ export class XrplExecutor implements LedgerGateway {
   private readonly client: Client;
 
   constructor(endpoint: string) {
-    this.client = new Client(endpoint);
+    // The 5s xrpl.js default regularly misses the first connect to the public
+    // testnet; 20s absorbs it (observed live).
+    this.client = new Client(endpoint, { connectionTimeout: 20_000 });
   }
 
   async connect(): Promise<void> {

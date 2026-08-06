@@ -35,6 +35,12 @@ export const QUOTE_REFRESH_MS = 10_000;
 /** Trustline limit granted to accounts holding the test dollar. */
 export const TRUSTLINE_LIMIT = '1000000';
 
+/**
+ * Websocket connect timeout. The xrpl.js default of 5s is regularly too short
+ * for the first connection to the public testnet from this network.
+ */
+export const XRPL_CONNECT_TIMEOUT_MS = 20_000;
+
 /** Test dollar the maker quotes against, unless overridden. */
 const DEFAULT_COUNTER_CURRENCY = 'USD';
 
@@ -155,7 +161,7 @@ async function submitAndWait(
 
 /** Provision a funded issuer and maker from the testnet faucet. */
 async function runSetup(config: MarketMakerConfig): Promise<void> {
-  const client = new Client(config.xrplEndpoint);
+  const client = new Client(config.xrplEndpoint, { connectionTimeout: XRPL_CONNECT_TIMEOUT_MS });
   await client.connect();
   try {
     const issuer = (await client.fundWallet()).wallet;
@@ -190,7 +196,7 @@ async function runTrustline(config: MarketMakerConfig, holderSeed: string): Prom
   const issuer = Wallet.fromSeed(config.issuerSeed);
   const holder = Wallet.fromSeed(holderSeed);
 
-  const client = new Client(config.xrplEndpoint);
+  const client = new Client(config.xrplEndpoint, { connectionTimeout: XRPL_CONNECT_TIMEOUT_MS });
   await client.connect();
   try {
     const hash = await submitAndWait(
@@ -213,7 +219,7 @@ async function runQuoting(config: MarketMakerConfig): Promise<void> {
   const maker = Wallet.fromSeed(config.makerSeed);
   const ftsoReader = new FtsoReader(config.chainUrl);
 
-  const client = new Client(config.xrplEndpoint);
+  const client = new Client(config.xrplEndpoint, { connectionTimeout: XRPL_CONNECT_TIMEOUT_MS });
   await client.connect();
   console.log(`[market-maker] quoting ${config.currency} from ${maker.classicAddress}`);
 

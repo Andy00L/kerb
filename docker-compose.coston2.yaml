@@ -14,6 +14,12 @@ services:
       # match the proxy's chain_id and the on-chain registry, or signature
       # verification fails (InvalidTeePublicKeyOrSignature / proxy panic).
       - CHAIN_ID=${CHAIN_ID:-114}
+      # Kerb execution engine. Without these the extension still serves
+      # instructions but the supervisor stays off (it says so at startup).
+      # INSTRUCTION_SENDER arrives via env_file (config/extension.env).
+      - XRPL_ENDPOINT=${XRPL_ENDPOINT:-wss://s.altnet.rippletest.net:51233}
+      - KERB_COUNTER_CURRENCY=${KERB_COUNTER_CURRENCY:-}
+      - KERB_COUNTER_ISSUER=${KERB_COUNTER_ISSUER:-}
 
 networks:
   default:

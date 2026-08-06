@@ -50,6 +50,13 @@ func main() {
 	cf := flag.String("c", configs.ChainNodeURL, "chain node url")
 	pf := flag.String("p", configs.ExtensionProxyURL, "extension proxy url")
 	instructionSenderF := flag.String("instructionSender", os.Getenv("INSTRUCTION_SENDER"), "InstructionSender contract address")
+	payoutF := flag.String("payout", demoPayoutAddress, "XRPL payout address for the mandate")
+	priceF := flag.String("triggerPrice", "0.10", "trigger price (decimal string)")
+	totalF := flag.String("total", "250", "total size in XRP")
+	sliceF := flag.String("slice", "50", "slice size in XRP")
+	jitterF := flag.Int("jitter", 20, "jitter percent")
+	expiryHoursF := flag.Int("expiryHours", 1, "mandate lifetime in hours")
+	keepF := flag.Bool("keep", false, "keep the mandate alive (skip the cancel step)")
 	flag.Parse()
 
 	if *instructionSenderF == "" {
@@ -126,7 +133,7 @@ func main() {
 
 	// --- Step 4: createMandate ---
 	logger.Infof("Step 4: Creating an encrypted stop-loss mandate...")
-	mandateJSON, err := buildMandateJSON()
+	mandateJSON, err := buildMandateJSON(*payoutF, *priceF, *totalF, *sliceF, *jitterF, *expiryHoursF)
 	if err != nil {
 		fccutils.FatalWithCause(errors.Errorf("build mandate: %s", err))
 	}
@@ -141,6 +148,16 @@ func main() {
 		fccutils.FatalWithCause(errors.Errorf("createMandate: %s", err))
 	}
 	logger.Infof("  createMandate instruction ID: %s", mandateInstructionID.Hex())
+
+	// The proxy hands a stored result out once: whoever fetches it consumes it.
+	// In -keep mode the keeper must be that reader, so it can relay the signed
+	// provisioning result on-chain through applyProvision. Reading it here for
+	// display would strand the mandate at CREATED forever.
+	if *keepF {
+		logger.Infof("Step 5 and 6: Skipped (-keep). Relay the result with:")
+		logger.Infof("  keeper.js provision %s", mandateInstructionID.Hex())
+		return
+	}
 
 	time.Sleep(resultPollDelay)
 	mandateResponse, err := fccutils.ActionResult(*pf, mandateInstructionID)
@@ -189,9 +206,10 @@ func main() {
 	logger.Infof("All tests passed.")
 }
 
-// buildMandateJSON produces a schema-valid stop-loss mandate that expires an
-// hour from now, matching the schema the extension enforces.
-func buildMandateJSON() ([]byte, error) {
+// buildMandateJSON produces a schema-valid stop-loss mandate matching the
+// schema the extension enforces. Parameters come from the CLI flags so the
+// same command drives both the automated test and a live demo mandate.
+func buildMandateJSON(payoutAddress, triggerPrice, total, slice string, jitterPercent, expiryHours int) ([]byte, error) {
 	mandate := map[string]interface{}{
 		"v":    1,
 		"pair": "XRP/USD",
@@ -200,16 +218,16 @@ func buildMandateJSON() ([]byte, error) {
 		"trigger": map[string]interface{}{
 			"feedId": xrpUsdFeedID,
 			"op":     "lte",
-			"price":  "0.10",
+			"price":  triggerPrice,
 		},
 		"size": map[string]interface{}{
-			"total":     "250",
-			"slice":     "50",
-			"jitterPct": 20,
+			"total":     total,
+			"slice":     slice,
+			"jitterPct": jitterPercent,
 		},
 		"bound":  map[string]interface{}{"maxSlippagePct": 1},
-		"expiry": time.Now().Add(time.Hour).Unix(),
-		"payout": map[string]interface{}{"xrplAddress": demoPayoutAddress},
+		"expiry": time.Now().Add(time.Duration(expiryHours) * time.Hour).Unix(),
+		"payout": map[string]interface{}{"xrplAddress": payoutAddress},
 	}
 	return json.Marshal(mandate)
 }

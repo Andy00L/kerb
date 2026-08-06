@@ -23,6 +23,13 @@ import {
   type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { Agent, setGlobalDispatcher } from 'undici';
+
+// Pin every fetch (native and viem's) to IPv4: this tool runs on developer
+// machines where WSL advertises an IPv6 route that never connects, and undici
+// then burns its whole connect timeout on it. Verified live: IPv6 to the
+// verifier times out while IPv4 answers.
+setGlobalDispatcher(new Agent({ connect: { family: 4 } }));
 
 /**
  * Coston2 addresses, resolvable through FlareContractRegistry.

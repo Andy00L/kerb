@@ -210,6 +210,15 @@ func SendCreateMandate(s *support.Support, instructionSenderAddress common.Addre
 		})
 }
 
+// SendRequestReport asks the enclave for a signed execution report.
+// Returns (instructionId, txHash).
+func SendRequestReport(s *support.Support, instructionSenderAddress common.Address, mandateId *big.Int) (common.Hash, common.Hash, error) {
+	return sendInstruction(s, instructionSenderAddress, "requestReport", []interface{}{mandateId},
+		func(opts *bind.TransactOpts, sender *sign.InstructionSender) (*types.Transaction, error) {
+			return sender.RequestReport(opts, mandateId)
+		})
+}
+
 // SendCancelMandate cancels a mandate on-chain and notifies the enclave.
 // Returns (instructionId, txHash).
 func SendCancelMandate(s *support.Support, instructionSenderAddress common.Address, mandateId *big.Int) (common.Hash, common.Hash, error) {

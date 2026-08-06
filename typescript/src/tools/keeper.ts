@@ -20,7 +20,11 @@ import {
   type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { Agent, setGlobalDispatcher } from 'undici';
 import { waitForActionResult, type ActionResponse } from './proxy.js';
+
+// Same IPv4 pin as fdc.ts: WSL's broken IPv6 route starves undici's connect.
+setGlobalDispatcher(new Agent({ connect: { family: 4 } }));
 
 const RELAY_ABI = [
   {

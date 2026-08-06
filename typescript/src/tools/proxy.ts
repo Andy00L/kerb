@@ -24,8 +24,15 @@ export interface ActionResponse {
   readonly proxySignature: string;
 }
 
-/** Default submission tag used by the instruction path. */
-export const DEFAULT_SUBMISSION_TAG = 'submit';
+/**
+ * Chain-relayed instructions are stored under the tags "threshold" and "end",
+ * never "submit". Asking for a specific tag returns that delivery pass as-is,
+ * and the "end" pass carries the providers' vote aggregate instead of the
+ * enclave payload. Omitting the tag returns the raw enclave result (data =
+ * the extension's ABI payload, signature = the TEE signature the contract
+ * verifies), which is what a relayer needs. Verified live on Coston2.
+ */
+export const DEFAULT_SUBMISSION_TAG: string | undefined = undefined;
 
 function isActionResponse(candidate: unknown): candidate is ActionResponse {
   if (typeof candidate !== 'object' || candidate === null) {
@@ -51,10 +58,11 @@ function isActionResponse(candidate: unknown): candidate is ActionResponse {
 export async function fetchActionResult(
   proxyUrl: string,
   actionId: string,
-  submissionTag: string = DEFAULT_SUBMISSION_TAG,
+  submissionTag: string | undefined = DEFAULT_SUBMISSION_TAG,
   timeoutMs = 15_000,
 ): Promise<ActionResponse | null> {
-  const url = `${proxyUrl.replace(/\/$/, '')}/action/result/${actionId}?submissionTag=${submissionTag}`;
+  const base = `${proxyUrl.replace(/\/$/, '')}/action/result/${actionId}`;
+  const url = submissionTag === undefined ? base : `${base}?submissionTag=${submissionTag}`;
 
   const abortController = new AbortController();
   const timeoutHandle = setTimeout(() => abortController.abort(), timeoutMs);

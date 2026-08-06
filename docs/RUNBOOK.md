@@ -119,6 +119,24 @@ cast call 0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE \
 After any tunnel rotation: update `EXT_PROXY_URL`, re-run `use-chain.sh`, restart
 the stack, re-run `post-build.sh`.
 
+Three lessons from the first live run (all cost real debugging time):
+
+1. **Every extension-tee restart mints a new TEE identity** under
+   `SIMULATED_TEE=true`: the keypair lives in process memory. After any
+   restart, re-run `post-build.sh` (fresh registration, wait for PRODUCTION)
+   AND `setTeeAddress` with the new address from `/info`, or every pushed
+   instruction is silently dropped and every relayed result fails signature
+   verification. Never restart while a live mandate holds funds.
+2. **Instruction delivery pauses around signing-policy transitions.** When
+   the proxy logs `signing policy N not yet on chain; waiting`, instructions
+   sent during the window are lost, not queued: polling their result 404s
+   forever. Send a fresh instruction once delivery resumes (TEE_INFO health
+   checks in the proxy log show it is back).
+3. **The demo issuer needs DefaultRipple** (`AccountSet SetFlag: 8`), or its
+   IOU cannot move between third parties and the counter-currency settlement
+   leg fails with `tecPATH_DRY`. The engine reports that miss cleanly, but
+   set the flag right after `market-maker setup` and it never happens.
+
 ## 5. Kerb-specific bring-up
 
 Two steps the scaffold does not have, because Kerb holds enclave key material.
@@ -175,8 +193,13 @@ Only `Data`, `ID`, `SubmissionTag` and `Status` are covered by the TEE
 signature. Everything else in an `ActionResult`, including `Log`, `OPType` and
 `OPCommand`, is unsigned and is never trusted on-chain.
 
-Result polling: `GET {EXT_PROXY_URL}/action/result/{actionId}?submissionTag=submit`,
-which returns 404 until a result is stored.
+Result polling: `GET {EXT_PROXY_URL}/action/result/{actionId}` with NO
+submissionTag parameter: that returns the raw enclave result (data = the
+extension's ABI payload, signature = the TEE signature the contract checks).
+Chain-relayed instructions are stored under the tags `threshold` and `end`
+(the providers' two delivery passes), never `submit`, and the `end` pass
+carries the vote aggregate instead of the enclave payload. All three verified
+live on Coston2.
 
 Pending results: the proxy keeps status `0` and `1` as permanently final, and
 only accepts a transient update whose status is strictly higher than the stored
