@@ -5,19 +5,57 @@ import { AppHeader } from "@/components/kerb/AppHeader";
 import { PriceThread } from "@/components/kerb/PriceThread";
 import { ProofSeal } from "@/components/kerb/ProofSeal";
 import { SealedBar } from "@/components/kerb/SealedBar";
+import { useWallet } from "@/components/kerb/WalletProvider";
+import { readAppConfig } from "@/lib/config";
 import {
   buildDemoTimeline,
   DEMO_DEPOSIT_ADDRESS,
   DEMO_SLICES,
   findDemoMandate,
+  type DemoTimelineEvent,
+  type MandateStatusWord,
 } from "@/lib/demo";
 import {
   formatDeltaBasisPoints,
   formatPriceMicro,
   formatXrpCents,
 } from "@/lib/format";
+import { submitCancel, submitReportRequest } from "@/lib/mandate";
 import { useLivePrice } from "@/lib/useLivePrice";
+import { useOnChainMandate } from "@/lib/useOnChainMandate";
 import styles from "./MandateDetail.module.css";
+
+/** Lifecycle words in on-chain order, for the live timeline. */
+const LIVE_TIMELINE_WORDS: readonly MandateStatusWord[] = [
+  "Created",
+  "Provisioned",
+  "Funded",
+  "Executing",
+  "Filled",
+  "Settled",
+];
+
+/** Drops per hundredth of XRP, the display unit of formatXrpCents. */
+const DROPS_PER_XRP_CENT = 10_000n;
+
+/**
+ * Timeline derived from the on-chain status alone. Timestamps and hashes need
+ * the indexer, so they stay blank; the proof seal marks the two FDC-gated
+ * states once they are reached.
+ */
+function buildLiveTimeline(statusWord: MandateStatusWord): DemoTimelineEvent[] {
+  const reachedIndex = LIVE_TIMELINE_WORDS.indexOf(statusWord);
+  return LIVE_TIMELINE_WORDS.map((word, index) => ({
+    word,
+    timestamp: "-",
+    hash: "-",
+    done: reachedIndex >= 0 && index <= reachedIndex,
+    proven:
+      reachedIndex >= 0 &&
+      index <= reachedIndex &&
+      (word === "Funded" || word === "Settled"),
+  }));
+}
 
 const SEALED_FIELDS: ReadonlyArray<readonly [string, number]> = [
   ["Trigger price", 78],
@@ -29,30 +67,81 @@ const SEALED_FIELDS: ReadonlyArray<readonly [string, number]> = [
 ];
 
 export function MandateDetail({ mandateId }: { mandateId: number }) {
+  const isLive = readAppConfig().isLive;
+  const onChain = useOnChainMandate(isLive ? mandateId : null);
+  const { address } = useWallet();
   const mandate = findDemoMandate(mandateId) ?? findDemoMandate(6);
   const [cancelled, setCancelled] = useState(false);
   const [copied, setCopied] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
+  const [actionFailure, setActionFailure] = useState<string | null>(null);
   const price = useLivePrice(true);
 
-  const status = cancelled ? "Cancelled" : (mandate?.status ?? "Executing");
+  const baseStatus: MandateStatusWord =
+    isLive && onChain !== null
+      ? onChain.statusWord
+      : (mandate?.status ?? "Executing");
+  const status = cancelled ? "Cancelled" : baseStatus;
   const awaitingDeposit = status === "Created" || status === "Provisioned";
   const executing = !awaitingDeposit && status !== "Cancelled";
   const dimmed = status === "Cancelled" || status === "Expired";
-  const filledCents = awaitingDeposit ? 0n : (mandate?.filledCents ?? 0n);
+  const filledCents = isLive
+    ? (onChain?.filledDrops ?? 0n) / DROPS_PER_XRP_CENT
+    : awaitingDeposit
+      ? 0n
+      : (mandate?.filledCents ?? 0n);
   const totalCents = mandate?.totalCents ?? 250_000n;
   const fillPercent =
     totalCents === 0n ? 0 : Number((filledCents * 1000n) / totalCents) / 10;
-  const timeline = buildDemoTimeline(executing || dimmed);
+  const timeline = isLive
+    ? buildLiveTimeline(baseStatus)
+    : buildDemoTimeline(executing || dimmed);
+
+  // Live mode shows only the enclave-derived address read from the contract;
+  // the FDC deposit proof is bound to it, so nothing else may be funded.
+  const depositAddress = isLive
+    ? onChain !== null && onChain.depositAddress !== ""
+      ? onChain.depositAddress
+      : null
+    : DEMO_DEPOSIT_ADDRESS;
 
   const copyDepositAddress = (): void => {
+    if (depositAddress === null) {
+      return;
+    }
     try {
-      void navigator.clipboard.writeText(DEMO_DEPOSIT_ADDRESS);
+      void navigator.clipboard.writeText(depositAddress);
     } catch (copyError) {
       console.log(`[copyDepositAddress] clipboard unavailable: ${copyError}`);
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1_200);
+  };
+
+  const requestReport = async (): Promise<void> => {
+    setActionFailure(null);
+    setReportRequested(true);
+    if (isLive && address !== null) {
+      const result = await submitReportRequest(mandateId, address);
+      if (!result.ok) {
+        setActionFailure(result.reason);
+        setReportRequested(false);
+        return;
+      }
+    }
+    setTimeout(() => setReportRequested(false), 1_600);
+  };
+
+  const cancelMandate = async (): Promise<void> => {
+    setActionFailure(null);
+    if (isLive && address !== null) {
+      const result = await submitCancel(mandateId, address);
+      if (!result.ok) {
+        setActionFailure(result.reason);
+        return;
+      }
+    }
+    setCancelled(true);
   };
 
   return (
@@ -63,7 +152,9 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
           <div className={styles.headLeft}>
             <h1 className={styles.title}>XRP/USD</h1>
             <span className={styles.sideKind}>
-              {mandate?.side ?? "Sell"} · {mandate?.kind ?? "stop"}
+              {isLive
+                ? "side and kind sealed"
+                : `${mandate?.side ?? "Sell"} · ${mandate?.kind ?? "stop"}`}
             </span>
             <span
               className={styles.status}
@@ -78,15 +169,15 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
               dimmed ? { opacity: 0.45, pointerEvents: "none" } : undefined
             }
           >
-            <span className="chip">Mandate #{mandate?.id ?? 6}</span>
+            <span className="chip">
+              Mandate #{isLive ? mandateId : (mandate?.id ?? 6)}
+            </span>
             <button
               type="button"
               className="btn btnQuiet"
               disabled={reportRequested}
               onClick={() => {
-                // Live mode relays a REPORT instruction; the demo acknowledges.
-                setReportRequested(true);
-                setTimeout(() => setReportRequested(false), 1_600);
+                void requestReport();
               }}
             >
               {reportRequested ? "Report requested" : "Request report"}
@@ -94,12 +185,20 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
             <button
               type="button"
               className="btn btnDanger"
-              onClick={() => setCancelled(true)}
+              onClick={() => {
+                void cancelMandate();
+              }}
             >
               Cancel mandate
             </button>
           </div>
         </div>
+
+        {actionFailure !== null ? (
+          <div className="errorBand" style={{ marginTop: 12 }}>
+            <span>{actionFailure}</span>
+          </div>
+        ) : null}
 
         <div className={`${styles.threadRow} rise`} style={{ animationDelay: "40ms" }}>
           <PriceThread
@@ -129,17 +228,28 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
             <h2 className={styles.cardTitle}>Execution</h2>
             <div className="hairlineSolid" style={{ margin: "12px 0 16px" }} />
             <div className={`mono ${styles.fillLine}`}>
-              {formatXrpCents(filledCents)} / {formatXrpCents(totalCents)} XRP
+              {isLive
+                ? `${formatXrpCents(filledCents)} XRP filled · total sealed`
+                : `${formatXrpCents(filledCents)} / ${formatXrpCents(totalCents)} XRP`}
             </div>
-            <div className={styles.progressTrack}>
-              <span
-                className={styles.progressFill}
-                style={{ width: `${fillPercent}%` }}
-              />
-            </div>
+            {isLive ? null : (
+              // The total is part of the sealed strategy, so live mode has no
+              // denominator to draw a progress bar against.
+              <div className={styles.progressTrack}>
+                <span
+                  className={styles.progressFill}
+                  style={{ width: `${fillPercent}%` }}
+                />
+              </div>
+            )}
             {!executing && !dimmed ? (
               <p className={styles.emptyFills}>
                 No fills yet. Waiting for the trigger.
+              </p>
+            ) : isLive ? (
+              <p className={styles.emptyFills}>
+                Per-slice fills live on XRPL: open the deposit account on the
+                testnet explorer to audit every OfferCreate.
               </p>
             ) : (
               <div className={styles.sliceBlock}>
@@ -182,23 +292,33 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
               {executing ? <ProofSeal animated /> : null}
             </div>
             <div className="hairlineSolid" style={{ margin: "12px 0 16px" }} />
-            <div className={`well ${styles.depositWell}`}>
-              <span className={`mono ${styles.depositAddress}`}>
-                {DEMO_DEPOSIT_ADDRESS}
-              </span>
-              <button
-                type="button"
-                className={`btn btnQuiet ${styles.copyButton}`}
-                onClick={copyDepositAddress}
-              >
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
+            {depositAddress === null ? (
+              <div className={`well ${styles.depositWell}`}>
+                <span className={`mono ${styles.depositAddress}`}>
+                  Provisioning…
+                </span>
+              </div>
+            ) : (
+              <div className={`well ${styles.depositWell}`}>
+                <span className={`mono ${styles.depositAddress}`}>
+                  {depositAddress}
+                </span>
+                <button
+                  type="button"
+                  className={`btn btnQuiet ${styles.copyButton}`}
+                  onClick={copyDepositAddress}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            )}
             <div className={`mono ${styles.depositTag}`}>
-              Tag: {mandate?.id ?? 6}, required
+              Tag: {isLive ? mandateId : (mandate?.id ?? 6)}, required
             </div>
             <p className={styles.depositNote}>
-              Fund from any XRPL wallet. The deposit is proven on-chain by FDC.
+              {depositAddress === null
+                ? "The enclave-derived address appears once provisioning is relayed on-chain. Do not send funds before it does."
+                : "Fund from any XRPL wallet. The deposit is proven on-chain by FDC."}
             </p>
           </section>
         </div>

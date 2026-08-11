@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/kerb/AppHeader";
+import { LiveDeposit } from "@/components/kerb/LiveDeposit";
 import { useWallet } from "@/components/kerb/WalletProvider";
+import { waitForMandateId } from "@/lib/chain";
+import { readAppConfig } from "@/lib/config";
 import { DEMO_DEPOSIT_ADDRESS } from "@/lib/demo";
 import {
   submitMandate,
@@ -11,6 +14,9 @@ import {
   type MandateDraft,
 } from "@/lib/mandate";
 import styles from "./Create.module.css";
+
+/** Mandate id the demo dataset assigns to a freshly created mandate. */
+const DEMO_CREATED_MANDATE_ID = 7;
 
 type Phase = "form" | "review" | "done";
 type ButtonStep = "seal" | "wallet" | "submitting" | "error";
@@ -159,6 +165,8 @@ export default function CreateMandatePage() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [submitFailure, setSubmitFailure] = useState<string | null>(null);
+  const [createdMandateId, setCreatedMandateId] = useState(DEMO_CREATED_MANDATE_ID);
+  const isLive = readAppConfig().isLive;
 
   // Synchronizes the default expiry with the wall clock, once.
   useEffect(() => {
@@ -213,13 +221,26 @@ export default function CreateMandatePage() {
       address ?? "0x0000000000000000000000000000000000000000",
       (nextPhase) => setButtonStep(nextPhase === "wallet" ? "wallet" : "submitting"),
     );
-    if (result.ok) {
-      setPhase("done");
-      setButtonStep("seal");
-    } else {
+    if (!result.ok) {
       setButtonStep("error");
       setSubmitFailure(result.reason);
+      return;
     }
+    if (isLive) {
+      // The id is assigned on-chain; read it from the MandateCreated event so
+      // the done screen and the detail link point at the real mandate.
+      const mandateId = await waitForMandateId(
+        result.transactionHash as `0x${string}`,
+      );
+      if (mandateId === null) {
+        setButtonStep("error");
+        setSubmitFailure("the transaction did not confirm; check the explorer");
+        return;
+      }
+      setCreatedMandateId(mandateId);
+    }
+    setPhase("done");
+    setButtonStep("seal");
   };
 
   const reviewRows = buildReviewRows(values);
@@ -280,7 +301,9 @@ export default function CreateMandatePage() {
         <div className={`card ${styles.cardShell} rise`}>
           <div className={styles.cardHead}>
             <h1 className={styles.cardTitle}>
-              {phase === "done" ? "Mandate #7 created" : "New mandate"}
+              {phase === "done"
+                ? `Mandate #${createdMandateId} created`
+                : "New mandate"}
             </h1>
             {phase === "review" && !sealedNow ? (
               <button
@@ -586,23 +609,33 @@ export default function CreateMandatePage() {
             <div className={styles.depositBlock}>
               <h2 className={styles.depositTitle}>Deposit</h2>
               <div className="hairlineSolid" style={{ margin: "10px 0 14px" }} />
-              <div className={`well ${styles.depositWell}`}>
-                <span className={`mono ${styles.depositAddress}`}>
-                  {DEMO_DEPOSIT_ADDRESS}
-                </span>
-                <button
-                  type="button"
-                  className={`btn btnQuiet ${styles.copyButton}`}
-                  onClick={copyDepositAddress}
-                >
-                  {copied ? "Copied" : "Copy"}
-                </button>
-              </div>
-              <div className={`mono ${styles.depositTag}`}>Tag: 7, required</div>
-              <p className={styles.depositNote}>
-                Fund from any XRPL wallet. The deposit is proven on-chain by
-                FDC.
-              </p>
+              {isLive ? (
+                // Live mode only ever shows the address read from the chain:
+                // funding anything else would miss the FDC deposit proof.
+                <LiveDeposit mandateId={createdMandateId} />
+              ) : (
+                <>
+                  <div className={`well ${styles.depositWell}`}>
+                    <span className={`mono ${styles.depositAddress}`}>
+                      {DEMO_DEPOSIT_ADDRESS}
+                    </span>
+                    <button
+                      type="button"
+                      className={`btn btnQuiet ${styles.copyButton}`}
+                      onClick={copyDepositAddress}
+                    >
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <div className={`mono ${styles.depositTag}`}>
+                    Tag: {createdMandateId}, required
+                  </div>
+                  <p className={styles.depositNote}>
+                    Fund from any XRPL wallet. The deposit is proven on-chain
+                    by FDC.
+                  </p>
+                </>
+              )}
             </div>
           ) : null}
 
@@ -634,7 +667,7 @@ export default function CreateMandatePage() {
             </button>
           ) : (
             <Link
-              href="/app/m/7"
+              href={`/app/m/${createdMandateId}`}
               className={`btn btnPrimary ${styles.footerButton}`}
             >
               View mandate

@@ -9,9 +9,13 @@
  * simulates the same phases so the flow stays walkable without a deployment.
  */
 
-import { encrypt } from "eciesjs";
 import { encodeFunctionData } from "viem";
 import { readAppConfig } from "./config";
+import {
+  buildUncompressedPublicKey,
+  encryptToEnclave,
+  type TeePublicKeyCoordinates,
+} from "./ecies";
 
 /** XRP/USD block-latency feed id, the one pair this build supports. */
 export const XRP_USD_FEED_ID =
@@ -42,11 +46,38 @@ const CREATE_MANDATE_ABI = [
   {
     type: "function",
     name: "createMandate",
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     inputs: [{ name: "_encryptedMandate", type: "bytes" }],
     outputs: [{ name: "mandateId", type: "uint256" }],
   },
 ] as const;
+
+const CANCEL_MANDATE_ABI = [
+  {
+    type: "function",
+    name: "cancelMandate",
+    stateMutability: "payable",
+    inputs: [{ name: "_mandateId", type: "uint256" }],
+    outputs: [],
+  },
+] as const;
+
+const REQUEST_REPORT_ABI = [
+  {
+    type: "function",
+    name: "requestReport",
+    stateMutability: "payable",
+    inputs: [{ name: "_mandateId", type: "uint256" }],
+    outputs: [],
+  },
+] as const;
+
+/**
+ * Fee forwarded to TeeExtensionRegistry.sendInstructions with every
+ * instruction-sending call, in wei.
+ * sourceRef: go/tools/pkg/utils/instructions.go (DefaultFee).
+ */
+export const INSTRUCTION_FEE_WEI = 1_000_000_000_000n;
 
 /** Serialize a draft into the exact JSON document the enclave validates. */
 export function buildMandateDocument(draft: MandateDraft): string {
@@ -75,20 +106,34 @@ export function buildMandateDocument(draft: MandateDraft): string {
   return JSON.stringify(document);
 }
 
+/**
+ * The /info response fields Kerb reads. The key lives at
+ * machineData.publicKey as {x, y} 32 byte hex words.
+ * sourceRef: tee-node pkg/types/tee.go (TeeInfoResponse, MachineData).
+ */
 interface ProxyInfo {
-  readonly publicKey?: string;
-  readonly teePublicKey?: string;
+  readonly machineData?: {
+    readonly publicKey?: TeePublicKeyCoordinates;
+  };
 }
 
 /** Fetch the TEE encryption key from the ext-proxy /info endpoint. */
-async function fetchTeePublicKey(proxyUrl: string): Promise<string | null> {
+async function fetchTeePublicKey(proxyUrl: string): Promise<Uint8Array | null> {
   try {
     const response = await fetch(`${proxyUrl.replace(/\/$/, "")}/info`);
     if (!response.ok) {
       return null;
     }
     const info = (await response.json()) as ProxyInfo;
-    return info.teePublicKey ?? info.publicKey ?? null;
+    const coordinates = info.machineData?.publicKey;
+    if (
+      coordinates === undefined ||
+      typeof coordinates.x !== "string" ||
+      typeof coordinates.y !== "string"
+    ) {
+      return null;
+    }
+    return buildUncompressedPublicKey(coordinates);
   } catch {
     return null;
   }
@@ -131,20 +176,30 @@ export async function submitMandate(
   }
 
   const plaintext = new TextEncoder().encode(buildMandateDocument(draft));
-  const ciphertext = encrypt(teePublicKey, plaintext);
+  let ciphertext: Uint8Array;
+  try {
+    ciphertext = encryptToEnclave(teePublicKey, plaintext);
+  } catch (encryptError) {
+    return { ok: false, reason: `mandate encryption failed: ${encryptError}` };
+  }
 
   onPhase("wallet");
   const callData = encodeFunctionData({
     abi: CREATE_MANDATE_ABI,
     functionName: "createMandate",
-    args: [toHexBytes(new Uint8Array(ciphertext))],
+    args: [toHexBytes(ciphertext)],
   });
 
   try {
     const transactionHash = (await provider.request({
       method: "eth_sendTransaction",
       params: [
-        { from: walletAddress, to: config.contractAddress, data: callData },
+        {
+          from: walletAddress,
+          to: config.contractAddress,
+          data: callData,
+          value: `0x${INSTRUCTION_FEE_WEI.toString(16)}`,
+        },
       ],
     })) as string;
     onPhase("submitting");
@@ -152,6 +207,64 @@ export async function submitMandate(
   } catch (sendError) {
     return { ok: false, reason: `wallet rejected the transaction: ${sendError}` };
   }
+}
+
+/** Send one fee-carrying single-argument contract call through the wallet. */
+async function sendMandateCall(
+  callData: `0x${string}`,
+  walletAddress: string,
+): Promise<SubmissionResult> {
+  const config = readAppConfig();
+  const provider = typeof window !== "undefined" ? window.ethereum : undefined;
+  if (!config.isLive || provider === undefined) {
+    return { ok: false, reason: "live mode is not configured" };
+  }
+  try {
+    const transactionHash = (await provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from: walletAddress,
+          to: config.contractAddress,
+          data: callData,
+          value: `0x${INSTRUCTION_FEE_WEI.toString(16)}`,
+        },
+      ],
+    })) as string;
+    return { ok: true, transactionHash };
+  } catch (sendError) {
+    return { ok: false, reason: `wallet rejected the transaction: ${sendError}` };
+  }
+}
+
+/** Cancel a mandate on-chain. The contract enforces that the caller owns it. */
+export async function submitCancel(
+  mandateId: number,
+  walletAddress: string,
+): Promise<SubmissionResult> {
+  return sendMandateCall(
+    encodeFunctionData({
+      abi: CANCEL_MANDATE_ABI,
+      functionName: "cancelMandate",
+      args: [BigInt(mandateId)],
+    }),
+    walletAddress,
+  );
+}
+
+/** Ask the enclave for a signed execution report (relayed by the keeper). */
+export async function submitReportRequest(
+  mandateId: number,
+  walletAddress: string,
+): Promise<SubmissionResult> {
+  return sendMandateCall(
+    encodeFunctionData({
+      abi: REQUEST_REPORT_ABI,
+      functionName: "requestReport",
+      args: [BigInt(mandateId)],
+    }),
+    walletAddress,
+  );
 }
 
 /** XRPL classic address shape (sourceRef: xrpl.org base58 address format). */
