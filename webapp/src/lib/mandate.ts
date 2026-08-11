@@ -16,6 +16,7 @@ import {
   encryptToEnclave,
   type TeePublicKeyCoordinates,
 } from "./ecies";
+import type { Eip1193Provider } from "./wallets";
 
 /** XRP/USD block-latency feed id, the one pair this build supports. */
 export const XRP_USD_FEED_ID =
@@ -157,11 +158,11 @@ export async function submitMandate(
   draft: MandateDraft,
   walletAddress: string,
   onPhase: (phase: SubmissionPhase) => void,
+  provider: Eip1193Provider | null,
 ): Promise<SubmissionResult> {
   const config = readAppConfig();
-  const provider = typeof window !== "undefined" ? window.ethereum : undefined;
 
-  if (!config.isLive || config.proxyUrl === null || provider === undefined) {
+  if (!config.isLive || config.proxyUrl === null || provider === null) {
     // Demo mode: same phases, no chain.
     onPhase("wallet");
     await new Promise((resolve) => setTimeout(resolve, 1_700));
@@ -213,10 +214,10 @@ export async function submitMandate(
 async function sendMandateCall(
   callData: `0x${string}`,
   walletAddress: string,
+  provider: Eip1193Provider | null,
 ): Promise<SubmissionResult> {
   const config = readAppConfig();
-  const provider = typeof window !== "undefined" ? window.ethereum : undefined;
-  if (!config.isLive || provider === undefined) {
+  if (!config.isLive || provider === null) {
     return { ok: false, reason: "live mode is not configured" };
   }
   try {
@@ -241,6 +242,7 @@ async function sendMandateCall(
 export async function submitCancel(
   mandateId: number,
   walletAddress: string,
+  provider: Eip1193Provider | null,
 ): Promise<SubmissionResult> {
   return sendMandateCall(
     encodeFunctionData({
@@ -249,6 +251,7 @@ export async function submitCancel(
       args: [BigInt(mandateId)],
     }),
     walletAddress,
+    provider,
   );
 }
 
@@ -256,6 +259,7 @@ export async function submitCancel(
 export async function submitReportRequest(
   mandateId: number,
   walletAddress: string,
+  provider: Eip1193Provider | null,
 ): Promise<SubmissionResult> {
   return sendMandateCall(
     encodeFunctionData({
@@ -264,6 +268,7 @@ export async function submitReportRequest(
       args: [BigInt(mandateId)],
     }),
     walletAddress,
+    provider,
   );
 }
 

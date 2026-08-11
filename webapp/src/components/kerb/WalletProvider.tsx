@@ -3,10 +3,12 @@
 /**
  * Shared wallet state.
  *
- * One EIP-1193 connection for the whole app: the header chip and every
- * screen read the same context, so connecting anywhere connects everywhere.
- * Without a browser wallet (the common judging setup), connect falls back to
- * a labelled demo identity so every flow stays walkable.
+ * One connection for the whole app: the header chip and every screen read
+ * the same context, so connecting anywhere connects everywhere. Wallets are
+ * discovered per EIP-6963 (src/lib/wallets.ts); the user picks one from the
+ * header dropdown. Without any installed wallet the picker proposes real
+ * ones and offers the labelled demo identity, so every flow stays walkable
+ * in a judging setup.
  */
 
 import {
@@ -19,68 +21,131 @@ import {
 } from "react";
 import { COSTON2_CHAIN_ID } from "@/lib/config";
 import { DEMO_WALLET } from "@/lib/demo";
-
-interface Eip1193Provider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-}
-
-declare global {
-  interface Window {
-    ethereum?: Eip1193Provider;
-  }
-}
+import {
+  discoverWallets,
+  type DetectedWallet,
+  type Eip1193Provider,
+} from "@/lib/wallets";
 
 export interface WalletState {
   readonly address: string | null;
   readonly isDemo: boolean;
+  /** The provider transactions go through; null when demo or disconnected. */
+  readonly provider: Eip1193Provider | null;
+  /** rdns of the connected wallet, for the picker's "connected" marker. */
+  readonly connectedRdns: string | null;
+  readonly wallets: DetectedWallet[];
+  readonly isPickerOpen: boolean;
+  /** Re-detects wallets and opens the picker (or connects the only one). */
   readonly connect: () => Promise<void>;
+  readonly connectWith: (wallet: DetectedWallet) => Promise<void>;
+  readonly connectDemo: () => void;
+  readonly closePicker: () => void;
 }
 
 const WalletContext = createContext<WalletState>({
   address: null,
   isDemo: false,
+  provider: null,
+  connectedRdns: null,
+  wallets: [],
+  isPickerOpen: false,
   connect: async () => {},
+  connectWith: async () => {},
+  connectDemo: () => {},
+  closePicker: () => {},
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [provider, setProvider] = useState<Eip1193Provider | null>(null);
+  const [connectedRdns, setConnectedRdns] = useState<string | null>(null);
+  const [wallets, setWallets] = useState<DetectedWallet[]>([]);
+  const [isPickerOpen, setPickerOpen] = useState(false);
+
+  const connectWith = useCallback(
+    async (wallet: DetectedWallet): Promise<void> => {
+      try {
+        const accounts = (await wallet.provider.request({
+          method: "eth_requestAccounts",
+        })) as string[];
+        const firstAccount = accounts[0];
+        if (firstAccount === undefined) {
+          return;
+        }
+        setAddress(firstAccount);
+        setIsDemo(false);
+        setProvider(wallet.provider);
+        setConnectedRdns(wallet.rdns);
+        setPickerOpen(false);
+        // Best effort: land the wallet on Coston2. A rejection is not fatal.
+        try {
+          await wallet.provider.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${COSTON2_CHAIN_ID.toString(16)}` }],
+          });
+        } catch (switchError) {
+          console.log(`[connectWith] chain switch declined: ${switchError}`);
+        }
+      } catch (connectError) {
+        console.log(`[connectWith] connection declined: ${connectError}`);
+      }
+    },
+    [],
+  );
+
+  const connectDemo = useCallback((): void => {
+    setAddress(DEMO_WALLET);
+    setIsDemo(true);
+    setProvider(null);
+    setConnectedRdns(null);
+    setPickerOpen(false);
+  }, []);
 
   const connect = useCallback(async (): Promise<void> => {
-    const provider =
-      typeof window !== "undefined" ? window.ethereum : undefined;
-    if (provider === undefined) {
-      setAddress(DEMO_WALLET);
-      setIsDemo(true);
-      return;
-    }
-    try {
-      const accounts = (await provider.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      const firstAccount = accounts[0];
-      if (firstAccount === undefined) {
+    const detected = discoverWallets();
+    setWallets(detected);
+    // Exactly one wallet and nothing connected yet: no choice to make.
+    if (detected.length === 1 && address === null) {
+      const onlyWallet = detected[0];
+      if (onlyWallet !== undefined) {
+        await connectWith(onlyWallet);
         return;
       }
-      setAddress(firstAccount);
-      setIsDemo(false);
-      // Best effort: land the wallet on Coston2. A rejection is not fatal.
-      try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x${COSTON2_CHAIN_ID.toString(16)}` }],
-        });
-      } catch (switchError) {
-        console.log(`[WalletProvider] chain switch declined: ${switchError}`);
-      }
-    } catch (connectError) {
-      console.log(`[WalletProvider] connection declined: ${connectError}`);
     }
+    setPickerOpen(true);
+  }, [address, connectWith]);
+
+  const closePicker = useCallback((): void => {
+    setPickerOpen(false);
   }, []);
 
   const value = useMemo(
-    () => ({ address, isDemo, connect }),
-    [address, isDemo, connect],
+    () => ({
+      address,
+      isDemo,
+      provider,
+      connectedRdns,
+      wallets,
+      isPickerOpen,
+      connect,
+      connectWith,
+      connectDemo,
+      closePicker,
+    }),
+    [
+      address,
+      isDemo,
+      provider,
+      connectedRdns,
+      wallets,
+      isPickerOpen,
+      connect,
+      connectWith,
+      connectDemo,
+      closePicker,
+    ],
   );
 
   return (

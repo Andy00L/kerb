@@ -156,7 +156,7 @@ function buildReviewRows(values: FormValues): Array<[string, string]> {
 }
 
 export default function CreateMandatePage() {
-  const { address, connect } = useWallet();
+  const { address, provider, connect } = useWallet();
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [phase, setPhase] = useState<Phase>("form");
@@ -220,6 +220,7 @@ export default function CreateMandatePage() {
       draft,
       address ?? "0x0000000000000000000000000000000000000000",
       (nextPhase) => setButtonStep(nextPhase === "wallet" ? "wallet" : "submitting"),
+      provider,
     );
     if (!result.ok) {
       setButtonStep("error");

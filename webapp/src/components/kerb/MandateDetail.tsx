@@ -69,7 +69,7 @@ const SEALED_FIELDS: ReadonlyArray<readonly [string, number]> = [
 export function MandateDetail({ mandateId }: { mandateId: number }) {
   const isLive = readAppConfig().isLive;
   const onChain = useOnChainMandate(isLive ? mandateId : null);
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
   const mandate = findDemoMandate(mandateId) ?? findDemoMandate(6);
   const [cancelled, setCancelled] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -122,7 +122,7 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
     setActionFailure(null);
     setReportRequested(true);
     if (isLive && address !== null) {
-      const result = await submitReportRequest(mandateId, address);
+      const result = await submitReportRequest(mandateId, address, provider);
       if (!result.ok) {
         setActionFailure(result.reason);
         setReportRequested(false);
@@ -135,7 +135,7 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
   const cancelMandate = async (): Promise<void> => {
     setActionFailure(null);
     if (isLive && address !== null) {
-      const result = await submitCancel(mandateId, address);
+      const result = await submitCancel(mandateId, address, provider);
       if (!result.ok) {
         setActionFailure(result.reason);
         return;
