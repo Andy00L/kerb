@@ -21,6 +21,15 @@ describe("hexToBytes", () => {
     const b = hexToBytes("0x");
     expect(b.length).toBe(0);
   });
+
+  it("throws on odd-length hex instead of truncating", () => {
+    expect(() => hexToBytes("0xabc")).toThrow("invalid hex string");
+  });
+
+  it("throws on non-hex characters instead of decoding a prefix", () => {
+    expect(() => hexToBytes("0xzz")).toThrow("invalid hex string");
+    expect(() => hexToBytes("dead beef")).toThrow("invalid hex string");
+  });
 });
 
 describe("bytesToHex", () => {

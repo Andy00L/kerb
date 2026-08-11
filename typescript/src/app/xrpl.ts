@@ -7,7 +7,7 @@
  * prices and issued-currency values. No float ever touches an order.
  */
 
-import { Client, type OfferCreate, type Payment, type Wallet } from 'xrpl';
+import { Client, getBalanceChanges, type OfferCreate, type Payment, type Wallet } from 'xrpl';
 import { DROPS_PER_XRP } from './config.js';
 import { PRICE_SCALE, PRICE_SCALE_DECIMALS, type MandateSide } from './mandate.js';
 
@@ -251,6 +251,55 @@ export interface SubmissionOutcome {
   readonly transactionHash: string;
   readonly engineResult: string;
   readonly validated: boolean;
+  /** Fee the signing account paid, in drops. */
+  readonly feeDrops: bigint;
+  /**
+   * Net XRP change of the signing account in the validated transaction, in
+   * drops (fee included, negative when the account paid out). Null only when
+   * the ledger returned no usable metadata.
+   */
+  readonly accountXrpDeltaDrops: bigint | null;
+}
+
+/** Signed decimal XRP string, as getBalanceChanges reports it, to drops. */
+export function parseSignedXrpToDrops(value: string): bigint {
+  const match = /^(-?)(\d+)(?:\.(\d{1,6}))?$/.exec(value);
+  if (match === null) {
+    throw new Error(`not an XRP amount: ${value}`);
+  }
+  const [, sign, wholePart, fractionPart = ''] = match;
+  const drops = BigInt(wholePart) * DROPS_PER_XRP + BigInt(fractionPart.padEnd(6, '0'));
+  return sign === '-' ? -drops : drops;
+}
+
+/**
+ * XRP actually moved by one slice, measured from the account's validated
+ * balance change rather than assumed from the order size: an
+ * immediate-or-cancel OfferCreate returns tesSUCCESS even when it crosses
+ * nothing or fills partially, so the requested slice is only an upper bound.
+ *
+ * When the metadata is unavailable the full slice is assumed. That errs on
+ * the side of over-counting, which stops the mandate early and leaves the
+ * remainder for settlement to refund; under-counting would re-trade and could
+ * spend past the mandate total.
+ */
+export function measureFilledDrops(
+  side: MandateSide,
+  sliceDrops: bigint,
+  feeDrops: bigint,
+  accountXrpDeltaDrops: bigint | null,
+): bigint {
+  if (accountXrpDeltaDrops === null) {
+    return sliceDrops;
+  }
+  const movedDrops =
+    side === 'sell'
+      ? -accountXrpDeltaDrops - feeDrops
+      : accountXrpDeltaDrops + feeDrops;
+  if (movedDrops <= 0n) {
+    return 0n;
+  }
+  return movedDrops < sliceDrops ? movedDrops : sliceDrops;
 }
 
 /** The ledger operations the engine depends on, an interface so tests can fake it. */
@@ -305,15 +354,34 @@ export class XrplExecutor implements LedgerGateway {
     const signed = wallet.sign(prepared);
     const response = await this.client.submitAndWait(signed.tx_blob);
 
-    const engineResult =
+    const meta =
       typeof response.result.meta === 'object' && response.result.meta !== null
-        ? response.result.meta.TransactionResult
-        : 'unknown';
+        ? response.result.meta
+        : null;
+    const engineResult = meta === null ? 'unknown' : meta.TransactionResult;
+
+    // The account's own XRP balance change is the ground truth for how much a
+    // slice actually moved; the fee is read from the autofilled transaction so
+    // callers can separate it from the traded amount.
+    let accountXrpDeltaDrops: bigint | null = null;
+    if (meta !== null) {
+      const ownChanges = getBalanceChanges(meta).find(
+        (change) => change.account === wallet.classicAddress,
+      );
+      const xrpChange = ownChanges?.balances.find(
+        (balance) => balance.issuer === undefined && balance.currency === 'XRP',
+      );
+      if (xrpChange !== undefined) {
+        accountXrpDeltaDrops = parseSignedXrpToDrops(xrpChange.value);
+      }
+    }
 
     return {
       transactionHash: signed.hash,
       engineResult,
       validated: response.result.validated === true,
+      feeDrops: BigInt(prepared.Fee ?? '0'),
+      accountXrpDeltaDrops,
     };
   }
 

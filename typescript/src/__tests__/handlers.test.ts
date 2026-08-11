@@ -266,6 +266,33 @@ describe('KERB handlers', () => {
     expect(stateJson).not.toContain(deriveMandateWallet(MASTER_SEED, 6n).classicAddress);
   });
 
+  it('refuses to replace the master seed while mandates hold derived keys', async () => {
+    await installMasterSeed();
+    decryptPlaintext = new TextEncoder().encode(buildMandateJson());
+    await postAction(
+      buildActionBody(
+        OP_TYPE_KERB,
+        OP_COMMAND_CREATE_MANDATE,
+        buildCreateEnvelope(7n, '0xdeadbeef'),
+      ),
+    );
+
+    // A different seed would re-derive every deposit address: refused.
+    decryptPlaintext = new Uint8Array(32).fill(9);
+    const [, replaced] = await postAction(
+      buildActionBody(OP_TYPE_KERB, OP_COMMAND_INIT_SEED, bytesToHex(new Uint8Array([1]))),
+    );
+    expect(replaced.status).toBe(0);
+    expect(String(replaced.log)).toContain('refusing to replace the master seed');
+
+    // Replaying the SAME seed is the documented restart recovery: accepted.
+    decryptPlaintext = MASTER_SEED;
+    const [, replayed] = await postAction(
+      buildActionBody(OP_TYPE_KERB, OP_COMMAND_INIT_SEED, bytesToHex(new Uint8Array([1]))),
+    );
+    expect(replayed.status).toBe(1);
+  });
+
   it('answers an unknown op type with HTTP 501', async () => {
     const [status] = await server.handleRequestDirect(
       'POST',

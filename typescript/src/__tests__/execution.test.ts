@@ -17,6 +17,8 @@ import {
   computeSliceDrops,
   convertDropsToCounter,
   formatIouValue,
+  measureFilledDrops,
+  parseSignedXrpToDrops,
   TF_IMMEDIATE_OR_CANCEL,
   TF_SELL,
 } from '../app/xrpl.js';
@@ -298,11 +300,32 @@ interface EngineHarness {
   readonly submissionTimes: number[];
 }
 
+/** Fee the fake ledger charges per transaction, in drops. */
+const FAKE_FEE_DROPS = 12n;
+
 interface HarnessOptions {
   readonly iouBalance?: string;
   readonly spendableDrops?: bigint;
   readonly engineResult?: string;
   readonly payoutHasTrustline?: boolean;
+  /** Explicit accountXrpDeltaDrops per submission; falls back to a full fill. */
+  readonly xrpDeltaQueue?: bigint[];
+  readonly locallyCancelled?: boolean;
+}
+
+/** Balance change of a fully filled fake transaction, as the ledger reports it. */
+function computeFullFillXrpDelta(transaction: OfferCreate | Payment): bigint {
+  if (transaction.TransactionType === 'OfferCreate') {
+    if (typeof transaction.TakerGets === 'string') {
+      // Selling XRP: the account pays the slice plus the fee.
+      return -BigInt(transaction.TakerGets) - FAKE_FEE_DROPS;
+    }
+    if (typeof transaction.TakerPays === 'string') {
+      // Buying XRP: the account receives the slice minus the fee.
+      return BigInt(transaction.TakerPays) - FAKE_FEE_DROPS;
+    }
+  }
+  return -FAKE_FEE_DROPS;
 }
 
 /** Drive the engine with a fake clock that advances on every poll sleep. */
@@ -336,6 +359,9 @@ function makeEngineHarness(mandate: ValidatedMandate, options: HarnessOptions = 
           transactionHash: `HASH${submitted.length}`,
           engineResult: options.engineResult ?? 'tesSUCCESS',
           validated: true,
+          feeDrops: FAKE_FEE_DROPS,
+          accountXrpDeltaDrops:
+            options.xrpDeltaQueue?.shift() ?? computeFullFillXrpDelta(transaction),
         };
       },
       readSpendableDrops: async () => options.spendableDrops ?? 0n,
@@ -347,6 +373,7 @@ function makeEngineHarness(mandate: ValidatedMandate, options: HarnessOptions = 
     sleep: async () => {
       nowSeconds += FEED_POLL_INTERVAL_MS / 1_000;
     },
+    isLocallyCancelled: () => options.locallyCancelled ?? false,
   };
 
   const wallet = Wallet.fromEntropy(new Uint8Array(16).fill(7));
@@ -357,12 +384,80 @@ function makeEngineHarness(mandate: ValidatedMandate, options: HarnessOptions = 
   return { engine, submitted, submissionTimes };
 }
 
+describe('measureFilledDrops', () => {
+  it('reads a full sell fill from the balance change', () => {
+    expect(measureFilledDrops('sell', 10_000_000n, 12n, -10_000_012n)).toBe(10_000_000n);
+  });
+
+  it('reads a partial fill instead of assuming the whole slice', () => {
+    expect(measureFilledDrops('sell', 10_000_000n, 12n, -5_000_012n)).toBe(5_000_000n);
+    expect(measureFilledDrops('buy', 10_000_000n, 12n, 4_999_988n)).toBe(5_000_000n);
+  });
+
+  it('reports zero when tesSUCCESS moved nothing but the fee', () => {
+    expect(measureFilledDrops('sell', 10_000_000n, 12n, -12n)).toBe(0n);
+    expect(measureFilledDrops('buy', 10_000_000n, 12n, -12n)).toBe(0n);
+  });
+
+  it('caps the measurement at the requested slice', () => {
+    expect(measureFilledDrops('sell', 10_000_000n, 12n, -99_000_012n)).toBe(10_000_000n);
+  });
+
+  it('assumes a full fill when the metadata is unavailable', () => {
+    // Over-counting stops early and refunds; under-counting would re-trade.
+    expect(measureFilledDrops('sell', 10_000_000n, 12n, null)).toBe(10_000_000n);
+  });
+});
+
+describe('parseSignedXrpToDrops', () => {
+  it('parses signed decimal XRP values exactly', () => {
+    expect(parseSignedXrpToDrops('-10.000012')).toBe(-10_000_012n);
+    expect(parseSignedXrpToDrops('0.5')).toBe(500_000n);
+    expect(parseSignedXrpToDrops('3')).toBe(3_000_000n);
+  });
+
+  it('rejects text that is not an XRP amount', () => {
+    expect(() => parseSignedXrpToDrops('1.0000001')).toThrow();
+    expect(() => parseSignedXrpToDrops('abc')).toThrow();
+  });
+});
+
 describe('MandateEngine', () => {
   it('works a stop mandate in slices until the total is filled', async () => {
     const harness = makeEngineHarness(makeMandate({ totalDrops: 30_000_000n }));
     const outcome = await harness.engine.run();
     expect(outcome).toBe('filled');
     expect(harness.submitted).toHaveLength(3);
+  });
+
+  it('counts only the measured fill, so a partial fill is retried', async () => {
+    const harness = makeEngineHarness(makeMandate({ totalDrops: 20_000_000n }), {
+      // First slice fills half; later slices fill fully.
+      xrpDeltaQueue: [-5_000_000n - FAKE_FEE_DROPS],
+    });
+    const outcome = await harness.engine.run();
+    expect(outcome).toBe('filled');
+    // 5 + 10 + remaining 5: three submissions to cover 20.
+    expect(harness.submitted).toHaveLength(3);
+    expect(harness.engine.buildReport(MandateStatus.Filled).filledDrops).toBe(20_000_000n);
+  });
+
+  it('does not count a tesSUCCESS order that crossed nothing', async () => {
+    const harness = makeEngineHarness(makeMandate({ totalDrops: 10_000_000n }), {
+      // First order finds no liquidity: only the fee moves.
+      xrpDeltaQueue: [-FAKE_FEE_DROPS],
+    });
+    const outcome = await harness.engine.run();
+    expect(outcome).toBe('filled');
+    expect(harness.submitted).toHaveLength(2);
+    expect(harness.engine.buildReport(MandateStatus.Filled).filledDrops).toBe(10_000_000n);
+  });
+
+  it('stops without trading once the cancel instruction arrived', async () => {
+    const harness = makeEngineHarness(makeMandate({}), { locallyCancelled: true });
+    const outcome = await harness.engine.run();
+    expect(outcome).toBe('cancelled');
+    expect(harness.submitted).toHaveLength(0);
   });
 
   it('paces DCA slices by the interval and stops at the execution count', async () => {

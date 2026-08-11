@@ -21,6 +21,7 @@ import {
   buildSettlementPayment,
   computeSliceDrops,
   isPositiveIouValue,
+  measureFilledDrops,
   type IssuedCurrency,
   type LedgerGateway,
 } from './xrpl.js';
@@ -52,6 +53,12 @@ export interface EngineDependencies {
   readonly randomFraction: () => number;
   readonly nowUnixSeconds: () => number;
   readonly sleep: (milliseconds: number) => Promise<void>;
+  /**
+   * True once a CANCEL_MANDATE instruction reached the enclave. The on-chain
+   * status stays authoritative (the contract cancels before notifying), so
+   * this only spares the engine the wait for its next status read.
+   */
+  readonly isLocallyCancelled: (mandateId: bigint) => boolean;
 }
 
 /** What settlement managed to move, and what it could not. */
@@ -120,6 +127,11 @@ export class MandateEngine {
       if (hasExpired(mandate, this.dependencies.nowUnixSeconds())) {
         console.log(`[MandateEngine] mandate ${mandateId} expired`);
         return 'expired';
+      }
+
+      if (this.dependencies.isLocallyCancelled(mandateId)) {
+        console.log(`[MandateEngine] mandate ${mandateId} cancelled by instruction`);
+        return 'cancelled';
       }
 
       const onChainStatus = await this.readStatus();
@@ -355,14 +367,29 @@ export class MandateEngine {
       const outcome = await this.dependencies.xrplExecutor.submit(offer, wallet);
       this.lastTransactionHash = outcome.transactionHash;
 
-      // tesSUCCESS covers a fully or partially filled immediate-or-cancel
-      // order. Anything else left the balance untouched.
+      // tesSUCCESS is returned even when an immediate-or-cancel order crosses
+      // nothing, so the fill is measured from the account's validated balance
+      // change instead of assumed from the order size.
       if (outcome.engineResult === 'tesSUCCESS') {
-        this.filledDrops += sliceDrops;
-        console.log(
-          `[MandateEngine] mandate ${mandateId} slice filled, tx ${outcome.transactionHash}`,
+        const filledNow = measureFilledDrops(
+          mandate.side,
+          sliceDrops,
+          outcome.feeDrops,
+          outcome.accountXrpDeltaDrops,
         );
-        return true;
+        if (filledNow > 0n) {
+          this.filledDrops += filledNow;
+          console.log(
+            `[MandateEngine] mandate ${mandateId} slice filled ${filledNow} of ` +
+              `${sliceDrops} drops, tx ${outcome.transactionHash}`,
+          );
+          return true;
+        }
+        console.log(
+          `[MandateEngine] mandate ${mandateId} slice found no liquidity, ` +
+            `tx ${outcome.transactionHash}`,
+        );
+        return false;
       }
       console.log(
         `[MandateEngine] mandate ${mandateId} slice not filled: ${outcome.engineResult}`,

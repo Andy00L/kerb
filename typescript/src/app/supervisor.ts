@@ -17,7 +17,12 @@ import { getMandateRecord, listMandateIds, recordExecutionProgress } from './han
 import type { ValidatedMandate } from './mandate.js';
 import { XrplExecutor, type IssuedCurrency } from './xrpl.js';
 
-/** Contract status values the engine is allowed to report. */
+/**
+ * Contract status values the engine is allowed to report. A cancelled mandate
+ * maps to Expired because the contract reserves CANCELLED for the owner's own
+ * cancelMandate call; once that lands, applyExecutionReport refuses any
+ * further report anyway, so the local record only feeds REPORT reads.
+ */
 const STATUS_BY_OUTCOME = {
   filled: MandateStatus.Filled,
   expired: MandateStatus.Expired,
@@ -83,6 +88,7 @@ export function startEngineSupervisor(config: SupervisorConfig): () => void {
     randomFraction: () => Math.random(),
     nowUnixSeconds: () => Math.floor(Date.now() / 1000),
     sleep,
+    isLocallyCancelled: (mandateId) => getMandateRecord(mandateId)?.cancelled === true,
   };
 
   const running = new Set<string>();
@@ -100,6 +106,9 @@ export function startEngineSupervisor(config: SupervisorConfig): () => void {
       }
 
       running.add(key);
+      // A crashed engine stays in `running` on purpose: restarting it fresh
+      // would reset its local fill counter and could re-trade past the total.
+      // Dead engines hold no funds hostage; settlement is replayable later.
       void runMandate(mandateId, record.walletSeed, record.mandate, dependencies, config)
         .catch((engineError) => {
           console.log(`[startEngineSupervisor] mandate ${key} stopped: ${engineError}`);

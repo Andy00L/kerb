@@ -110,8 +110,10 @@ export class Server {
       res.writeHead(405, { "Content-Type": "text/plain" });
       res.end("method not allowed");
     } else {
-      res.writeHead(501, { "Content-Type": "text/plain" });
-      res.end("unsupported op type");
+      // Same shape as handleRequestDirect: an unknown route is 404, while 501
+      // stays reserved for an op type no handler claims.
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("not found");
     }
   }
 

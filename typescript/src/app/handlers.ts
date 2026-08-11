@@ -124,6 +124,18 @@ function toPrefixedHex(msg: string): `0x${string}` {
   return (msg.startsWith('0x') ? msg : `0x${msg}`) as `0x${string}`;
 }
 
+/** Constant-shape byte comparison for the master seed guard. */
+function seedsAreEqual(currentSeed: Uint8Array, candidateSeed: Uint8Array): boolean {
+  if (currentSeed.length !== candidateSeed.length) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < currentSeed.length; index += 1) {
+    difference |= (currentSeed[index] ?? 0) ^ (candidateSeed[index] ?? 0);
+  }
+  return difference === 0;
+}
+
 /**
  * INIT_SEED: store the master seed every mandate key is derived from.
  * Replaying it after a restart rebuilds the same deposit addresses.
@@ -149,12 +161,25 @@ async function handleInitSeed(
     return [null, 0, `decryption failed: ${decryptError}`];
   }
 
+  let candidateSeed: Uint8Array;
   try {
-    masterSeed = parseMasterSeed(plaintext);
+    candidateSeed = parseMasterSeed(plaintext);
   } catch (seedError) {
     return [null, 0, `invalid master seed: ${seedError}`];
   }
 
+  // Replaying the same seed after a restart is the documented recovery path.
+  // A DIFFERENT seed would re-derive every deposit address and strand any
+  // funds sitting at the old ones, so it is refused while mandates exist.
+  if (masterSeed !== null && !seedsAreEqual(masterSeed, candidateSeed) && mandatesById.size > 0) {
+    return [
+      null,
+      0,
+      `refusing to replace the master seed while ${mandatesById.size} mandate(s) hold derived keys`,
+    ];
+  }
+
+  masterSeed = candidateSeed;
   console.log('[handleInitSeed] master seed installed');
   return [null, 1, null];
 }

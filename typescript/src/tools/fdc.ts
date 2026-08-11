@@ -229,6 +229,9 @@ export async function fetchProof(
   };
 }
 
+/** Upper bound on the wait for round finalisation, in milliseconds. */
+export const FINALISATION_TIMEOUT_MS = 20 * 60 * 1_000;
+
 /** Attempts made against the DA Layer after finalisation. */
 export const PROOF_FETCH_ATTEMPTS = 12;
 
@@ -322,6 +325,10 @@ async function main(): Promise<void> {
   console.log(`[fdc] requested in round ${votingRoundId}, tx ${requestHash}`);
 
   console.log('[fdc] waiting for the round to finalise');
+  // Rounds finalise about 90 to 180 seconds after they close; a round that is
+  // still open after this window will never finalise (fee lost, re-request),
+  // so the wait is bounded instead of spinning forever.
+  const finalisationDeadline = Date.now() + FINALISATION_TIMEOUT_MS;
   for (;;) {
     const finalised = await publicClient.readContract({
       address: RELAY_COSTON2,
@@ -331,6 +338,12 @@ async function main(): Promise<void> {
     });
     if (finalised) {
       break;
+    }
+    if (Date.now() >= finalisationDeadline) {
+      throw new Error(
+        `round ${votingRoundId} not finalised within ${FINALISATION_TIMEOUT_MS / 60_000} ` +
+          'minutes; re-run to request a fresh attestation',
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 10_000));
   }
