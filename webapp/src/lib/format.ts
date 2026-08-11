@@ -20,6 +20,15 @@ export function formatXrpCents(xrpCents: bigint): string {
   return `${grouped}.${fraction}`;
 }
 
+/** Signed micro-scaled delta as "+0.043210". */
+export function formatSignedPriceMicro(deltaMicro: bigint): string {
+  const sign = deltaMicro < 0n ? "-" : "+";
+  const magnitude = deltaMicro < 0n ? -deltaMicro : deltaMicro;
+  const whole = magnitude / PRICE_MICRO;
+  const fraction = (magnitude % PRICE_MICRO).toString().padStart(6, "0");
+  return `${sign}${whole.toString()}.${fraction}`;
+}
+
 /** Basis-point delta between a price and its session start, as "-0.42%". */
 export function formatDeltaBasisPoints(
   currentMicro: bigint,

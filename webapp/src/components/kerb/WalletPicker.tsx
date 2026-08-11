@@ -12,25 +12,7 @@
 import { useEffect, useRef } from "react";
 import { useWallet } from "@/components/kerb/WalletProvider";
 import { WALLET_PROPOSALS } from "@/lib/wallets";
-import styles from "./WalletPicker.module.css";
-
-/** Diagonal outward arrow for install links, matching the 1px glyph stroke. */
-function OutwardArrow() {
-  return (
-    <svg
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1"
-      className={styles.outArrow}
-      aria-hidden="true"
-    >
-      <path d="M2.5 7.5L7.5 2.5M3.5 2.5h4v4" />
-    </svg>
-  );
-}
+import { IconOpen } from "@/components/kerb/ui/icons";
 
 export function WalletPicker() {
   const { wallets, connectedRdns, isPickerOpen, connectWith, connectDemo, closePicker } =
@@ -90,53 +72,68 @@ export function WalletPicker() {
     }
   }, [isPickerOpen]);
 
-  if (!isPickerOpen) {
-    return null;
-  }
-
   return (
     <div
       ref={panelRef}
-      className={styles.panel}
+      className={`menu${isPickerOpen ? " open" : ""}`}
       role="menu"
       aria-label="Wallet selection"
+      style={{ minWidth: 240 }}
     >
       {wallets.length > 0 ? (
         <>
-          <div className={`eyebrow ${styles.groupLabel}`}>Installed wallets</div>
+          <div className="cap" style={{ padding: "8px 12px 4px" }}>
+            Installed wallets
+          </div>
           {wallets.map((wallet) => (
             <button
               key={wallet.rdns}
               type="button"
               role="menuitem"
-              className={styles.item}
+              className="mitem"
+              tabIndex={isPickerOpen ? 0 : -1}
+              style={{ justifyContent: "flex-start" }}
               onClick={() => {
                 void connectWith(wallet);
               }}
             >
               {wallet.icon === null ? (
-                <span className={styles.walletMarkFallback} aria-hidden="true" />
+                <span
+                  aria-hidden
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 6,
+                    background: "var(--card-hover)",
+                    border: "1px solid var(--hairline)",
+                    flex: "none",
+                  }}
+                />
               ) : (
                 // EIP-6963 icons are same-page data URIs from the wallet itself.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={wallet.icon}
                   alt=""
-                  className={styles.walletIcon}
-                  aria-hidden="true"
+                  aria-hidden
+                  style={{ width: 20, height: 20, borderRadius: 6, flex: "none" }}
                 />
               )}
-              <span className={styles.itemName}>{wallet.name}</span>
+              <span style={{ flex: 1, textAlign: "left" }}>{wallet.name}</span>
               {connectedRdns === wallet.rdns ? (
-                <span className={styles.connectedMark}>connected</span>
+                <span className="chip chip-up">connected</span>
               ) : null}
             </button>
           ))}
         </>
       ) : (
         <>
-          <p className={styles.emptyLine}>No wallet extension detected.</p>
-          <div className={`eyebrow ${styles.groupLabel}`}>Get one</div>
+          <p className="cap" style={{ padding: "8px 12px 4px" }}>
+            No wallet extension detected.
+          </p>
+          <div className="cap" style={{ padding: "8px 12px 4px" }}>
+            Get one
+          </div>
           {WALLET_PROPOSALS.map((proposal) => (
             <a
               key={proposal.name}
@@ -144,26 +141,28 @@ export function WalletPicker() {
               target="_blank"
               rel="noreferrer"
               role="menuitem"
-              className={styles.item}
+              className="mitem"
+              tabIndex={isPickerOpen ? 0 : -1}
             >
-              <span className={styles.itemName}>{proposal.name}</span>
-              <OutwardArrow />
+              <span>{proposal.name}</span>
+              <IconOpen />
             </a>
           ))}
         </>
       )}
-      <div className={styles.separator} />
+      <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
       <button
         type="button"
         role="menuitem"
-        className={styles.item}
+        className="mitem"
+        tabIndex={isPickerOpen ? 0 : -1}
+        style={{ height: "auto", padding: "8px 12px" }}
         onClick={connectDemo}
       >
-        <span className={styles.itemName}>
+        <span style={{ textAlign: "left" }}>
           Demo identity
-          <span className={styles.demoHint}>
-            walk every flow on sample data
-          </span>
+          <br />
+          <span className="cap">walk every flow on sample data</span>
         </span>
       </button>
     </div>

@@ -1,16 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { AppHeader } from "@/components/kerb/AppHeader";
-import { PriceThread } from "@/components/kerb/PriceThread";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { WalletCluster } from "@/components/kerb/AppShell";
 import { ProofSeal } from "@/components/kerb/ProofSeal";
 import { SealedBar } from "@/components/kerb/SealedBar";
+import { Fold } from "@/components/kerb/ui/Fold";
+import { HalftoneChart } from "@/components/kerb/ui/HalftoneChart";
+import { Menu } from "@/components/kerb/ui/Menu";
+import { Star } from "@/components/kerb/ui/Star";
+import { Tabs } from "@/components/kerb/ui/Tabs";
+import { Ticker } from "@/components/kerb/ui/Ticker";
+import {
+  IconCandles,
+  IconCheck,
+  IconCopy,
+  IconFullscreen,
+  IconLine,
+  IconPlus,
+  IconRail,
+} from "@/components/kerb/ui/icons";
 import { useWallet } from "@/components/kerb/WalletProvider";
+import { buildRangeSeries } from "@/lib/chartSeries";
 import { readAppConfig } from "@/lib/config";
 import {
   buildDemoTimeline,
   DEMO_DEPOSIT_ADDRESS,
-  DEMO_SLICES,
+  DEMO_MANDATES,
   findDemoMandate,
   type DemoTimelineEvent,
   type MandateStatusWord,
@@ -18,12 +34,13 @@ import {
 import {
   formatDeltaBasisPoints,
   formatPriceMicro,
+  formatSignedPriceMicro,
   formatXrpCents,
+  truncateMiddle,
 } from "@/lib/format";
 import { submitCancel, submitReportRequest } from "@/lib/mandate";
 import { useLivePrice } from "@/lib/useLivePrice";
 import { useOnChainMandate } from "@/lib/useOnChainMandate";
-import styles from "./MandateDetail.module.css";
 
 /** Lifecycle words in on-chain order, for the live timeline. */
 const LIVE_TIMELINE_WORDS: readonly MandateStatusWord[] = [
@@ -37,6 +54,12 @@ const LIVE_TIMELINE_WORDS: readonly MandateStatusWord[] = [
 
 /** Drops per hundredth of XRP, the display unit of formatXrpCents. */
 const DROPS_PER_XRP_CENT = 10_000n;
+
+const RANGE_TABS = ["1H", "1D", "1W", "1M", "3M", "YTD", "1Y"] as const;
+type RangeKey = (typeof RANGE_TABS)[number];
+type PaneKey = "pending" | "fills" | "history";
+type ChartStyle = "candles" | "line";
+type LadderMode = "chart" | "slices";
 
 /**
  * Timeline derived from the on-chain status alone. Timestamps and hashes need
@@ -57,16 +80,56 @@ function buildLiveTimeline(statusWord: MandateStatusWord): DemoTimelineEvent[] {
   }));
 }
 
-const SEALED_FIELDS: ReadonlyArray<readonly [string, number]> = [
-  ["Trigger price", 78],
-  ["Direction", 44],
-  ["Slice size", 62],
-  ["Jitter", 36],
-  ["Max slippage", 52],
-  ["Expiry", 92],
+interface LadderRow {
+  readonly slice: string;
+  readonly amount: string;
+  readonly fill: string | null;
+  readonly pending: boolean;
+}
+
+/** Demo ladder, highest slice first; the trigger line sits at the waterline. */
+const LADDER_TOP: readonly LadderRow[] = [
+  { slice: "#5", amount: "110.00", fill: null, pending: true },
+  { slice: "#4", amount: "105.44", fill: "300.19", pending: false },
 ];
 
-export function MandateDetail({ mandateId }: { mandateId: number }) {
+const LADDER_BOTTOM: readonly LadderRow[] = [
+  { slice: "#3", amount: "98.20", fill: "279.55", pending: false },
+  { slice: "#2", amount: "96.75", fill: "275.42", pending: false },
+  { slice: "#1", amount: "87.61", fill: "249.39", pending: false },
+];
+
+const DEMO_FILLS: ReadonlyArray<readonly [string, string, string, string]> = [
+  ["Slice #4", "105.44 XRP", "300.19 USD", "Aug 10, 14:22"],
+  ["Slice #3", "98.20 XRP", "279.55 USD", "Aug 9, 09:10"],
+  ["Slice #2", "96.75 XRP", "275.42 USD", "Aug 8, 11:47"],
+  ["Slice #1", "87.61 XRP", "249.39 USD", "Aug 7, 16:03"],
+];
+
+function factRow(
+  label: string,
+  value: ReactNode,
+  wide = false,
+): ReactNode {
+  return (
+    <div
+      key={label}
+      style={{
+        gridColumn: wide ? "1 / -1" : undefined,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 16,
+        minHeight: 32,
+      }}
+    >
+      <span className="cap">{label}</span>
+      {value}
+    </div>
+  );
+}
+
+export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
   const isLive = readAppConfig().isLive;
   const onChain = useOnChainMandate(isLive ? mandateId : null);
   const { address, provider } = useWallet();
@@ -75,7 +138,33 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
   const [copied, setCopied] = useState(false);
   const [reportRequested, setReportRequested] = useState(false);
   const [actionFailure, setActionFailure] = useState<string | null>(null);
+  const [range, setRange] = useState<RangeKey>("1D");
+  const [chartStyle, setChartStyle] = useState<ChartStyle>("line");
+  const [interval, setIntervalKey] = useState("1d");
+  const [expiry, setExpiry] = useState("Sep 8 (28d)");
+  const [ladderMode, setLadderMode] = useState<LadderMode>("slices");
+  const [ladderSide, setLadderSide] = useState<"sell" | "buy">("sell");
+  const [pane, setPane] = useState<PaneKey>("fills");
+  const [tallChart, setTallChart] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const price = useLivePrice(true);
+
+  // Session high and low ride along with the live feed. The pre-first-read
+  // placeholder never counts: openMicro is 0n until a reading applied.
+  const highRef = useRef(0n);
+  const lowRef = useRef(0n);
+  useEffect(() => {
+    if (price.priceMicro === 0n || price.openMicro === 0n) {
+      return;
+    }
+    if (highRef.current === 0n || price.priceMicro > highRef.current) {
+      highRef.current = price.priceMicro;
+    }
+    if (lowRef.current === 0n || price.priceMicro < lowRef.current) {
+      lowRef.current = price.priceMicro;
+    }
+  }, [price.priceMicro]);
 
   const baseStatus: MandateStatusWord =
     isLive && onChain !== null
@@ -85,14 +174,12 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
   const awaitingDeposit = status === "Created" || status === "Provisioned";
   const executing = !awaitingDeposit && status !== "Cancelled";
   const dimmed = status === "Cancelled" || status === "Expired";
+  const settled = status === "Settled";
   const filledCents = isLive
     ? (onChain?.filledDrops ?? 0n) / DROPS_PER_XRP_CENT
     : awaitingDeposit
       ? 0n
       : (mandate?.filledCents ?? 0n);
-  const totalCents = mandate?.totalCents ?? 250_000n;
-  const fillPercent =
-    totalCents === 0n ? 0 : Number((filledCents * 1000n) / totalCents) / 10;
   const timeline = isLive
     ? buildLiveTimeline(baseStatus)
     : buildDemoTimeline(executing || dimmed);
@@ -104,6 +191,41 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
       ? onChain.depositAddress
       : null
     : DEMO_DEPOSIT_ADDRESS;
+
+  const priceFloat = Number(price.priceMicro) / 1_000_000;
+  const series = useMemo(
+    () => buildRangeSeries(range, 64, priceFloat),
+    [range, priceFloat],
+  );
+  const hoverLabels = useMemo(
+    () =>
+      series.map((_, index) =>
+        range === "1H" || range === "1D"
+          ? `${String(Math.floor((index / series.length) * 24)).padStart(2, "0")}:00`
+          : `p${index + 1}`,
+      ),
+    [series, range],
+  );
+
+  const deltaMicro = price.openMicro === 0n ? 0n : price.priceMicro - price.openMicro;
+  const deltaColor = deltaMicro < 0n ? "var(--down)" : "var(--up)";
+  const percentText = `(${formatDeltaBasisPoints(price.priceMicro, price.openMicro)})`;
+
+  const hoveredValue = hoverIndex !== null ? series[hoverIndex] : null;
+  const ohlc =
+    hoveredValue !== null
+      ? {
+          o: (hoveredValue * 0.9974).toFixed(6),
+          h: (hoveredValue * 1.0018).toFixed(6),
+          l: (hoveredValue * 0.9951).toFixed(6),
+          c: hoveredValue.toFixed(6),
+        }
+      : {
+          o: formatPriceMicro(price.openMicro === 0n ? price.priceMicro : price.openMicro),
+          h: formatPriceMicro(highRef.current === 0n ? price.priceMicro : highRef.current),
+          l: formatPriceMicro(lowRef.current === 0n ? price.priceMicro : lowRef.current),
+          c: formatPriceMicro(price.priceMicro),
+        };
 
   const copyDepositAddress = (): void => {
     if (depositAddress === null) {
@@ -144,233 +266,750 @@ export function MandateDetail({ mandateId }: { mandateId: number }) {
     setCancelled(true);
   };
 
+  const currentId = isLive ? mandateId : (mandate?.id ?? 6);
+  const fillTint = ladderSide === "sell" ? "oa oa-sell num" : "oa oa-buy num";
+
+  const orderPill = (
+    text: string | null,
+    tinted: boolean,
+    maxWidth: number,
+  ): ReactNode => (
+    <span
+      className={tinted ? fillTint : "oa oa-neutral num"}
+      style={{ justifySelf: "end", width: "100%", maxWidth }}
+    >
+      {text === null ? (
+        <span style={{ color: "var(--ink-3)" }}>--</span>
+      ) : (
+        text
+      )}
+      <span className="plus">
+        <IconPlus />
+      </span>
+    </span>
+  );
+
   return (
-    <div>
-      <AppHeader />
-      <main className={`container ${styles.main}`}>
-        <div className={`${styles.headRow} rise`}>
-          <div className={styles.headLeft}>
-            <h1 className={styles.title}>XRP/USD</h1>
-            <span className={styles.sideKind}>
-              {isLive
-                ? "side and kind sealed"
-                : `${mandate?.side ?? "Sell"} · ${mandate?.kind ?? "stop"}`}
-            </span>
-            <span
-              className={styles.status}
-              style={{ color: dimmed ? "var(--ink-faint)" : "var(--ink-muted)" }}
-            >
-              ● {status}
-            </span>
-          </div>
-          <div
-            className={styles.actions}
-            style={
-              dimmed ? { opacity: 0.45, pointerEvents: "none" } : undefined
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      <nav
+        className={`rail rise${railOpen ? " open" : ""}`}
+        aria-label="Your mandates"
+      >
+        <button
+          type="button"
+          className="btn-icon"
+          aria-label="Toggle mandate rail"
+          onClick={() => setRailOpen((open) => !open)}
+        >
+          <IconRail />
+        </button>
+        <div style={{ width: 24, height: 1, background: "var(--hairline)", margin: "2px 0" }} />
+        {DEMO_MANDATES.map((entry) => (
+          <Link
+            key={entry.id}
+            className="railchip num"
+            href={`/app/m/${entry.id}`}
+            aria-label={
+              entry.id === currentId
+                ? `Mandate M${entry.id}, current`
+                : `Mandate M${entry.id}`
             }
+            aria-current={entry.id === currentId ? "true" : undefined}
           >
-            <span className="chip">
-              Mandate #{isLive ? mandateId : (mandate?.id ?? 6)}
-            </span>
-            <button
-              type="button"
-              className="btn btnQuiet"
-              disabled={reportRequested}
-              onClick={() => {
-                void requestReport();
+            M{entry.id}
+          </Link>
+        ))}
+      </nav>
+
+      <main style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
+        <div style={{ width: "100%", maxWidth: 1100, padding: "24px 24px 80px" }}>
+          <h1 className="vh">
+            Mandate M{currentId}: XRP/USD {mandate?.kind ?? "stop"}
+          </h1>
+          <header className="rise" style={{ animationDelay: "30ms" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 16,
+                flexWrap: "wrap",
               }}
             >
-              {reportRequested ? "Report requested" : "Request report"}
-            </button>
-            <button
-              type="button"
-              className="btn btnDanger"
-              onClick={() => {
-                void cancelMandate();
-              }}
-            >
-              Cancel mandate
-            </button>
-          </div>
-        </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn-icon railbtn-hdr"
+                  aria-label="Show mandate rail"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setRailOpen((open) => !open);
+                  }}
+                >
+                  <IconRail />
+                </button>
+                <span className="chip chip-neutral">
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: dimmed ? "var(--ink-3)" : "var(--up)",
+                      marginRight: 6,
+                    }}
+                  />
+                  XRP/USD
+                </span>
+                <span className="chip chip-neutral">
+                  {isLive ? "kind sealed" : (mandate?.kind ?? "stop")}
+                </span>
+                <span className="chip chip-neutral">{status}</span>
+                <Star ariaLabel="Watch this mandate" />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  opacity: dimmed ? 0.45 : 1,
+                  pointerEvents: dimmed ? "none" : undefined,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  disabled={reportRequested}
+                  onClick={() => {
+                    void requestReport();
+                  }}
+                >
+                  {reportRequested ? "Report requested" : "Request report"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    void cancelMandate();
+                  }}
+                >
+                  Cancel mandate
+                </button>
+                <WalletCluster />
+              </div>
+            </div>
 
-        {actionFailure !== null ? (
-          <div className="errorBand" style={{ marginTop: 12 }}>
-            <span>{actionFailure}</span>
-          </div>
-        ) : null}
+            {actionFailure !== null ? (
+              <div
+                className="card"
+                style={{
+                  marginTop: 12,
+                  padding: "10px 16px",
+                  border: "1px solid rgba(229,84,75,0.45)",
+                }}
+              >
+                <span style={{ fontSize: 13, color: "var(--down)" }}>{actionFailure}</span>
+              </div>
+            ) : null}
 
-        <div className={`${styles.threadRow} rise`} style={{ animationDelay: "40ms" }}>
-          <PriceThread
-            heightPx={180}
-            bandTopPx={76}
-            bandHeightPx={46}
-            caption="Trigger sealed in this band"
-            drawOnEnter
-          />
-          <div className={styles.priceColumn}>
-            <div className={`mono ${styles.livePrice}`}>
-              <span className={price.flash ? styles.priceFlash : styles.priceQuiet}>
-                {formatPriceMicro(price.priceMicro)}
+            <div style={{ marginTop: 20, display: "flex", alignItems: "baseline", gap: 10 }}>
+              <Ticker
+                value={formatPriceMicro(price.priceMicro)}
+                style={{
+                  fontSize: 44,
+                  fontWeight: 500,
+                  letterSpacing: "-0.01em",
+                  lineHeight: 1.1,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: "var(--ink-3)",
+                  fontWeight: 500,
+                  transform: "translateY(-4px)",
+                }}
+              >
+                USD
+              </span>
+              <span className="vh" aria-live="polite">
+                {formatPriceMicro(price.priceMicro)} USD, {percentText} today
               </span>
             </div>
-            <div className={`mono ${styles.priceDelta}`}>
-              {price.openMicro === 0n
-                ? "0.00%"
-                : formatDeltaBasisPoints(price.priceMicro, price.openMicro)}{" "}
-              session
+            <div
+              className="num"
+              style={{
+                marginTop: 6,
+                display: "flex",
+                alignItems: "baseline",
+                gap: 6,
+                fontSize: 14,
+                fontWeight: 600,
+                color: deltaColor,
+              }}
+            >
+              <Ticker value={formatSignedPriceMicro(deltaMicro)} />
+              <Ticker value={percentText} />
+              <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 12.5 }}>
+                {price.isSimulated ? "simulated feed" : "live FTSOv2 feed"}
+              </span>
             </div>
-          </div>
-        </div>
+            <div className="num" style={{ marginTop: 10, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12.5 }}>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ color: "var(--ink-3)" }}>O</span> {ohlc.o}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ color: "var(--ink-3)" }}>H</span> {ohlc.h}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ color: "var(--ink-3)" }}>L</span> {ohlc.l}
+              </span>
+              <span style={{ whiteSpace: "nowrap" }}>
+                <span style={{ color: "var(--ink-3)" }}>C</span> {ohlc.c}
+              </span>
+            </div>
+          </header>
 
-        <div className={`${styles.grid} rise`} style={{ animationDelay: "80ms" }}>
-          <section className="card">
-            <h2 className={styles.cardTitle}>Execution</h2>
-            <div className="hairlineSolid" style={{ margin: "12px 0 16px" }} />
-            <div className={`mono ${styles.fillLine}`}>
-              {isLive
-                ? `${formatXrpCents(filledCents)} XRP filled · total sealed`
-                : `${formatXrpCents(filledCents)} / ${formatXrpCents(totalCents)} XRP`}
+          <section
+            className="card rise"
+            aria-label="Price chart"
+            style={{ animationDelay: "90ms", marginTop: 40 }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <Tabs
+                className="icontabs"
+                ariaLabel="Chart style"
+                tabs={[
+                  {
+                    id: "candles" as ChartStyle,
+                    label: <IconCandles />,
+                    ariaLabel: "Candles",
+                  },
+                  {
+                    id: "line" as ChartStyle,
+                    label: <IconLine />,
+                    ariaLabel: "Line",
+                  },
+                ]}
+                selected={chartStyle}
+                onSelect={setChartStyle}
+              />
+              <Tabs
+                className="num"
+                ariaLabel="Chart range"
+                tabs={RANGE_TABS.map((key) => ({ id: key, label: key }))}
+                selected={range}
+                onSelect={setRange}
+              />
+              <div style={{ flex: 1 }} />
+              <Menu
+                label={<span className="num">Interval: {interval}</span>}
+                ariaLabel="Interval"
+                items={[
+                  { value: "1h", label: "1h" },
+                  { value: "1d", label: "1d" },
+                  { value: "1w", label: "1w" },
+                ]}
+                value={interval}
+                onPick={setIntervalKey}
+              />
+              <button
+                type="button"
+                className="btn-icon"
+                aria-label="Fullscreen chart"
+                aria-pressed={tallChart}
+                onClick={() => setTallChart((tall) => !tall)}
+              >
+                <IconFullscreen />
+              </button>
             </div>
-            {isLive ? null : (
-              // The total is part of the sealed strategy, so live mode has no
-              // denominator to draw a progress bar against.
-              <div className={styles.progressTrack}>
-                <span
-                  className={styles.progressFill}
-                  style={{ width: `${fillPercent}%` }}
-                />
-              </div>
-            )}
-            {!executing && !dimmed ? (
-              <p className={styles.emptyFills}>
-                No fills yet. Waiting for the trigger.
-              </p>
-            ) : isLive ? (
-              <p className={styles.emptyFills}>
-                Per-slice fills live on XRPL: open the deposit account on the
-                testnet explorer to audit every OfferCreate.
-              </p>
-            ) : (
-              <div className={styles.sliceBlock}>
-                <div className={`${styles.sliceGrid} ${styles.sliceHeader}`}>
-                  <span className="eyebrow">Time</span>
-                  <span className={`eyebrow ${styles.rightAlign}`}>Size</span>
-                  <span className={`eyebrow ${styles.hashPad}`}>XRPL tx</span>
-                  <span className={`eyebrow ${styles.rightAlign}`}>Result</span>
+            <div style={{ marginTop: 16, position: "relative" }}>
+              <HalftoneChart
+                series={series}
+                swapKey={range}
+                className="chartsvg"
+                heightPx={tallChart ? 400 : 248}
+                hoverLabels={hoverLabels}
+                onHoverPoint={setHoverIndex}
+              />
+            </div>
+          </section>
+
+          <div className="rise" style={{ animationDelay: "120ms", marginTop: 40 }}>
+            <Tabs
+              className="big"
+              ariaLabel="Chart or slices"
+              tabs={[
+                { id: "chart" as LadderMode, label: "Chart" },
+                { id: "slices" as LadderMode, label: "Slices" },
+              ]}
+              selected={ladderMode}
+              onSelect={setLadderMode}
+            />
+            <Fold open={ladderMode === "slices"}>
+              <section
+                aria-label="Slice ladder"
+                style={{
+                  marginTop: 16,
+                  background: "var(--card)",
+                  borderRadius: 16,
+                  padding: "12px 8px 12px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    padding: "4px 8px 12px",
+                  }}
+                >
+                  <Tabs
+                    className="big"
+                    ariaLabel="Side"
+                    tabs={[
+                      { id: "sell" as const, label: "Sell" },
+                      { id: "buy" as const, label: "Buy" },
+                    ]}
+                    selected={ladderSide}
+                    onSelect={setLadderSide}
+                    pillStyle={{
+                      background:
+                        ladderSide === "sell"
+                          ? "rgba(229,84,75,0.16)"
+                          : "rgba(55,188,101,0.16)",
+                    }}
+                  />
+                  <div style={{ flex: 1 }} />
+                  <Menu
+                    label={<span className="num">Expiry: {expiry}</span>}
+                    ariaLabel="Expiry"
+                    items={[
+                      { value: "Sep 8 (28d)", label: "Sep 8 (28d)" },
+                      { value: "Sep 22 (42d)", label: "Sep 22 (42d)" },
+                      { value: "Oct 6 (56d)", label: "Oct 6 (56d)" },
+                    ]}
+                    value={expiry}
+                    onPick={setExpiry}
+                  />
                 </div>
-                {DEMO_SLICES.map((slice) => (
-                  <div
-                    key={slice.hash}
-                    className={`${styles.sliceGrid} ${styles.sliceRow} ${
-                      slice.settled ? styles.rowBoundary : styles.rowDashed
-                    }`}
-                  >
-                    <span className={`mono ${styles.sliceMeta}`}>
-                      {slice.time}
-                    </span>
-                    <span className={`mono ${styles.sliceSize}`}>
-                      {slice.sizeXrp}
-                    </span>
-                    <span className={`mono ${styles.sliceMeta} ${styles.hashPad}`}>
-                      {slice.hash}
-                    </span>
-                    <span className={styles.sliceResult}>{slice.result}</span>
-                  </div>
-                ))}
+                {isLive ? (
+                  <p className="cap" style={{ padding: "4px 12px 8px", fontSize: 13 }}>
+                    Slice sizes stay sealed in live mode. Per-slice fills live
+                    on XRPL: open the deposit account on the testnet explorer
+                    to audit every OfferCreate.
+                  </p>
+                ) : (
+                  <>
+                    <div
+                      className="lhead num"
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 160px 170px",
+                        gap: 12,
+                        padding: "8px 12px",
+                        borderBottom: "1px solid var(--hairline-strong)",
+                        fontSize: 12.5,
+                        color: "var(--ink-3)",
+                      }}
+                    >
+                      <span>
+                        Slice <span style={{ fontSize: 11 }}>sorted high to low</span>
+                      </span>
+                      <span style={{ textAlign: "right" }}>Amount (XRP)</span>
+                      <span style={{ textAlign: "right" }}>Fill (USD)</span>
+                    </div>
+                    <div style={{ paddingTop: 4 }}>
+                      {LADDER_TOP.map((row) => (
+                        <div
+                          key={row.slice}
+                          className="lr"
+                          style={
+                            row.pending
+                              ? {
+                                  borderBottom: "1px dashed var(--hairline-strong)",
+                                  borderRadius: "10px 10px 0 0",
+                                }
+                              : undefined
+                          }
+                        >
+                          <span className="num" style={{ fontSize: 15, fontWeight: 600 }}>
+                            {row.slice}
+                          </span>
+                          {orderPill(row.amount, false, 150)}
+                          {orderPill(row.fill, true, 160)}
+                        </div>
+                      ))}
+                      <div
+                        className="num"
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                          padding: "10px 12px",
+                          margin: "4px 0",
+                          borderTop: "1px solid var(--hairline-strong)",
+                          borderBottom: "1px solid var(--hairline-strong)",
+                        }}
+                      >
+                        <span className="cap" style={{ whiteSpace: "nowrap" }}>
+                          FTSO live
+                        </span>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 10,
+                            fontWeight: 600,
+                            fontSize: 13,
+                          }}
+                        >
+                          <Ticker value={formatPriceMicro(price.priceMicro)} />
+                          <Ticker value={percentText} style={{ color: deltaColor }} />
+                          <span className="chip chip-up">
+                            {executing ? "armed" : status.toLowerCase()}
+                          </span>
+                        </span>
+                      </div>
+                      {LADDER_BOTTOM.map((row) => (
+                        <div key={row.slice} className="lr">
+                          <span className="num" style={{ fontSize: 15, fontWeight: 600 }}>
+                            {row.slice}
+                          </span>
+                          {orderPill(row.amount, false, 150)}
+                          {orderPill(row.fill, true, 160)}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </section>
+            </Fold>
+          </div>
+
+          <section
+            className="card rise"
+            aria-label="Sealed strategy"
+            style={{ animationDelay: "150ms", marginTop: 48 }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 600 }}>Sealed strategy</h2>
+            <p className="cap" style={{ marginTop: 4 }}>
+              Encrypted inside the TEE. The operator, the chain and this UI
+              cannot read it.
+            </p>
+            <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <span className="cap" style={{ width: 64 }}>
+                  Trigger
+                </span>
+                <SealedBar widthPx={180} />
               </div>
-            )}
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <span className="cap" style={{ width: 64 }}>
+                  Slices
+                </span>
+                <SealedBar widthPx={120} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <span className="cap" style={{ width: 64 }}>
+                  Jitter
+                </span>
+                <SealedBar widthPx={90} />
+              </div>
+            </div>
+            <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span className="cap">Deposit</span>
+                <ProofSeal
+                  state={executing || settled ? "ok" : "pending"}
+                  animated={executing || settled}
+                />
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span className="cap">Settlement</span>
+                <ProofSeal state={settled ? "ok" : "pending"} animated={settled} />
+              </span>
+            </div>
+          </section>
+
+          {awaitingDeposit || isLive ? (
+            <section
+              className="card rise"
+              aria-label="Deposit"
+              style={{ animationDelay: "165ms", marginTop: 48 }}
+            >
+              <h2 style={{ fontSize: 18, fontWeight: 600 }}>Deposit</h2>
+              <div style={{ height: 1, background: "var(--hairline)", margin: "12px 0 14px" }} />
+              {depositAddress === null ? (
+                <p className="cap" style={{ fontSize: 13 }}>
+                  The enclave-derived address appears once provisioning is
+                  relayed on-chain. Do not send funds before it does.
+                </p>
+              ) : (
+                <>
+                  <div className="well" style={{ height: "auto", padding: "10px 14px", gap: 12 }}>
+                    <span className="num" style={{ fontSize: 13, overflowWrap: "anywhere" }}>
+                      {depositAddress}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      aria-label="Copy deposit address"
+                      style={{ width: 32, height: 32 }}
+                      onClick={copyDepositAddress}
+                    >
+                      {copied ? (
+                        <span style={{ color: "var(--up)", display: "inline-flex" }}>
+                          <IconCheck />
+                        </span>
+                      ) : (
+                        <IconCopy />
+                      )}
+                    </button>
+                  </div>
+                  <div className="cap num" style={{ marginTop: 8 }}>
+                    Tag: {currentId}, required
+                  </div>
+                  <p className="cap" style={{ marginTop: 6, fontSize: 13 }}>
+                    Fund from any XRPL wallet. The deposit is proven on-chain
+                    by FDC.
+                  </p>
+                </>
+              )}
+            </section>
+          ) : null}
+
+          <section
+            className="rise"
+            aria-label="Mandate facts"
+            style={{ animationDelay: "180ms", marginTop: 48 }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
+              Mandate facts
+            </h2>
+            <div
+              className="facts"
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 48 }}
+            >
+              {factRow(
+                "Status",
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: dimmed
+                      ? "var(--ink-3)"
+                      : executing
+                        ? "var(--up)"
+                        : "var(--ink)",
+                  }}
+                >
+                  {status}
+                </span>,
+              )}
+              {factRow(
+                "Side",
+                isLive ? (
+                  <SealedBar widthPx={44} />
+                ) : (
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>
+                    {(mandate?.side ?? "Sell").toLowerCase()}
+                  </span>
+                ),
+              )}
+              {factRow(
+                "Kind",
+                isLive ? (
+                  <SealedBar widthPx={52} />
+                ) : (
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>
+                    {mandate?.kind ?? "stop"}
+                  </span>
+                ),
+              )}
+              {factRow("Trigger", <SealedBar widthPx={110} />)}
+              {factRow(
+                "Fills so far",
+                <span className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+                  {formatXrpCents(filledCents)} XRP
+                </span>,
+              )}
+              {factRow(
+                "Mandate",
+                <span className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+                  #{currentId}
+                </span>,
+              )}
+              {factRow(
+                "Wallet",
+                <span className="num" style={{ fontSize: 14, fontWeight: 600 }}>
+                  {address === null ? "not connected" : truncateMiddle(address, 6, 4)}
+                </span>,
+              )}
+              {depositAddress !== null
+                ? factRow(
+                    "Deposit",
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        minWidth: 0,
+                      }}
+                    >
+                      <span
+                        className="num"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {depositAddress} (tag {currentId})
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        aria-label="Copy deposit address"
+                        style={{ width: 32, height: 32 }}
+                        onClick={copyDepositAddress}
+                      >
+                        {copied ? (
+                          <span style={{ color: "var(--up)", display: "inline-flex" }}>
+                            <IconCheck />
+                          </span>
+                        ) : (
+                          <IconCopy />
+                        )}
+                      </button>
+                    </span>,
+                    true,
+                  )
+                : null}
+            </div>
           </section>
 
           <section
-            className="card"
-            style={{ position: "relative" }}
+            className="rise"
+            aria-label="Activity"
+            style={{ animationDelay: "210ms", marginTop: 48 }}
           >
-            {awaitingDeposit ? <span className={styles.depositRing} /> : null}
-            <div className={styles.cardHeadRow}>
-              <h2 className={styles.cardTitle}>Deposit</h2>
-              {executing ? <ProofSeal animated /> : null}
+            <Tabs
+              className="big"
+              ariaLabel="Activity tabs"
+              tabs={[
+                { id: "pending" as PaneKey, label: "Pending" },
+                { id: "fills" as PaneKey, label: "Fills" },
+                { id: "history" as PaneKey, label: "History" },
+              ]}
+              selected={pane}
+              onSelect={setPane}
+            />
+            <div
+              key={pane}
+              className="chartswap"
+              style={{
+                marginTop: 16,
+                background: "var(--card)",
+                borderRadius: 16,
+                padding: 8,
+                overflow: "hidden",
+              }}
+            >
+              {pane === "pending" ? (
+                !executing || isLive ? (
+                  <div className="brow">
+                    <span className="cap" style={{ fontSize: 13 }}>
+                      {isLive
+                        ? "Pending slices stay sealed until they fill."
+                        : "No pending slices. Everything is filled or settled."}
+                    </span>
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <div
+                    className="brow"
+                    style={{
+                      borderBottom: "1px dashed var(--hairline-strong)",
+                      borderRadius: "10px 10px 0 0",
+                    }}
+                  >
+                    <span>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>Slice #5</span>
+                      <br />
+                      <span className="cap">waiting for trigger</span>
+                    </span>
+                    <span className="num" style={{ fontWeight: 600 }}>
+                      110.00{" "}
+                      <span className="cap" style={{ fontWeight: 400 }}>
+                        XRP
+                      </span>
+                    </span>
+                    <ProofSeal state="pending" />
+                  </div>
+                )
+              ) : null}
+              {pane === "fills" ? (
+                isLive ? (
+                  <div className="brow">
+                    <span className="cap" style={{ fontSize: 13 }}>
+                      Per-slice fills live on XRPL: open the deposit account on
+                      the testnet explorer to audit every OfferCreate.
+                    </span>
+                    <span />
+                    <span />
+                  </div>
+                ) : !executing && !dimmed ? (
+                  <div className="brow">
+                    <span className="cap" style={{ fontSize: 13 }}>
+                      No fills yet. Waiting for the trigger.
+                    </span>
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  DEMO_FILLS.map(([slice, amount, fill, when]) => (
+                    <div key={slice} className="brow">
+                      <span>
+                        <span style={{ fontSize: 15, fontWeight: 600 }}>{slice}</span>
+                        <br />
+                        <span className="cap num">
+                          {amount} to {fill}
+                        </span>
+                      </span>
+                      <span className="cap num" style={{ whiteSpace: "nowrap" }}>
+                        {when}
+                      </span>
+                      <ProofSeal state="ok" />
+                    </div>
+                  ))
+                )
+              ) : null}
+              {pane === "history"
+                ? timeline.map((event) => (
+                    <div
+                      key={event.word}
+                      className="brow"
+                      style={{ color: event.done ? "var(--ink)" : "var(--ink-3)" }}
+                    >
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{event.word}</span>
+                      <span className="cap num" style={{ whiteSpace: "nowrap" }}>
+                        {event.timestamp}
+                      </span>
+                      <span>
+                        {event.proven ? <ProofSeal state="ok" animated /> : null}
+                      </span>
+                    </div>
+                  ))
+                : null}
             </div>
-            <div className="hairlineSolid" style={{ margin: "12px 0 16px" }} />
-            {depositAddress === null ? (
-              <div className={`well ${styles.depositWell}`}>
-                <span className={`mono ${styles.depositAddress}`}>
-                  Provisioning…
-                </span>
-              </div>
-            ) : (
-              <div className={`well ${styles.depositWell}`}>
-                <span className={`mono ${styles.depositAddress}`}>
-                  {depositAddress}
-                </span>
-                <button
-                  type="button"
-                  className={`btn btnQuiet ${styles.copyButton}`}
-                  onClick={copyDepositAddress}
-                >
-                  {copied ? "Copied" : "Copy"}
-                </button>
-              </div>
-            )}
-            <div className={`mono ${styles.depositTag}`}>
-              Tag: {isLive ? mandateId : (mandate?.id ?? 6)}, required
-            </div>
-            <p className={styles.depositNote}>
-              {depositAddress === null
-                ? "The enclave-derived address appears once provisioning is relayed on-chain. Do not send funds before it does."
-                : "Fund from any XRPL wallet. The deposit is proven on-chain by FDC."}
-            </p>
           </section>
         </div>
-
-        <section
-          className={`card ${styles.blockCard} rise`}
-          style={{ animationDelay: "120ms" }}
-        >
-          <h2 className={styles.cardTitle}>Timeline</h2>
-          <div className="hairlineSolid" style={{ margin: "12px 0 4px" }} />
-          {timeline.map((event, index) => (
-            <div
-              key={event.word}
-              className={`${styles.timelineGrid} ${
-                index === 0
-                  ? ""
-                  : event.done
-                    ? styles.rowBoundary
-                    : styles.rowDashed
-              }`}
-              style={{ color: event.done ? "var(--ink)" : "var(--ink-faint)" }}
-            >
-              <span className={styles.timelineWord}>{event.word}</span>
-              <span className={`mono ${styles.timelineMeta}`}>
-                {event.timestamp}
-              </span>
-              <span className={`mono ${styles.timelineMeta}`}>{event.hash}</span>
-              <span className={styles.timelineSealSlot}>
-                {event.proven ? <ProofSeal animated /> : null}
-              </span>
-            </div>
-          ))}
-        </section>
-
-        <section
-          className={`card ${styles.blockCard} rise`}
-          style={{ animationDelay: "160ms" }}
-        >
-          <div className={styles.cardHeadRow}>
-            <h2 className={styles.cardTitle}>Strategy (sealed)</h2>
-            <span className={`mono ${styles.sealedCaption}`}>Sealed in TEE</span>
-          </div>
-          <div className="hairlineSolid" style={{ margin: "12px 0 20px" }} />
-          <div className={styles.sealedGrid}>
-            {SEALED_FIELDS.map(([label, widthPx]) => (
-              <div key={label}>
-                <div className={styles.sealedLabel}>{label}</div>
-                <SealedBar widthPx={widthPx} />
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
     </div>
   );

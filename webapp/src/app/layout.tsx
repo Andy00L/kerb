@@ -3,27 +3,15 @@ import localFont from "next/font/local";
 import { WalletProvider } from "@/components/kerb/WalletProvider";
 import "./globals.css";
 
-const technor = localFont({
-  src: [{ path: "../fonts/technor-500.woff2", weight: "500", style: "normal" }],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const switzer = localFont({
+const instrumentSans = localFont({
   src: [
-    { path: "../fonts/switzer-400.woff2", weight: "400", style: "normal" },
-    { path: "../fonts/switzer-500.woff2", weight: "500", style: "normal" },
-    { path: "../fonts/switzer-600.woff2", weight: "600", style: "normal" },
+    {
+      path: "../fonts/instrument-sans-var.woff2",
+      weight: "400 700",
+      style: "normal",
+    },
   ],
   variable: "--font-body",
-  display: "swap",
-});
-
-const commitMono = localFont({
-  src: [
-    { path: "../fonts/commit-mono-400.woff2", weight: "400", style: "normal" },
-  ],
-  variable: "--font-mono",
   display: "swap",
 });
 
@@ -35,10 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${technor.variable} ${switzer.variable} ${commitMono.variable}`}
-    >
+    <html lang="en" className={instrumentSans.variable}>
       <body>
         <WalletProvider>{children}</WalletProvider>
       </body>
