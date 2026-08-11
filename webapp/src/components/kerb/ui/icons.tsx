@@ -45,6 +45,14 @@ export function IconArrowRight({ size = 16 }: IconProps) {
   );
 }
 
+export function IconArrowLeft({ size = 16 }: IconProps) {
+  return (
+    <svg {...frame(size)}>
+      <path d="M13 8H4M7.5 3.5 3 8l4.5 4.5" />
+    </svg>
+  );
+}
+
 export function IconPlus({ size = 16 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden>

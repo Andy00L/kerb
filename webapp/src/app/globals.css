@@ -738,6 +738,30 @@ input::placeholder {
   background: var(--card-hover);
 }
 
+/* Round chevron slot at the right edge of accordion headers. */
+.chevring {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--ink-2);
+  transition:
+    background 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+.secthead:hover .chevring {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.secthead[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+
 /* Slice ladder rows (detail). */
 .lr {
   display: grid;

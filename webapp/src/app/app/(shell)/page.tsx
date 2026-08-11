@@ -481,9 +481,12 @@ export default function DashboardPage() {
                   aria-expanded={activeOpen}
                   onClick={() => setActiveOpen((open) => !open)}
                 >
-                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span>
                     <span style={{ fontSize: 15, fontWeight: 600 }}>Active</span>
-                    <span className="chip chip-neutral num">{activeRows.length}</span>
+                    <br />
+                    <span className="cap num">
+                      {activeRows.length} mandate{activeRows.length === 1 ? "" : "s"}
+                    </span>
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
@@ -494,7 +497,9 @@ export default function DashboardPage() {
                       />
                       <span className="cap">XRP</span>
                     </span>
-                    <IconChevronDown />
+                    <span className="chevring">
+                      <IconChevronDown />
+                    </span>
                   </span>
                 </button>
                 <Fold open={activeOpen}>
@@ -529,7 +534,10 @@ export default function DashboardPage() {
                           <span className="chip chip-up">armed</span>
                         ) : null}
                         <br />
-                        <span className="cap">{rowCaption(row)}</span>
+                        <span className="cap">
+                          {rowCaption(row)} · {row.side.toLowerCase()}{" "}
+                          {row.kind === "DCA" ? "DCA" : row.kind}
+                        </span>
                       </span>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
                         {row.status === "Created" ? (
@@ -573,11 +581,16 @@ export default function DashboardPage() {
                   style={{ borderTop: "1px solid var(--hairline)", borderRadius: 0 }}
                   onClick={() => setDoneOpen((open) => !open)}
                 >
-                  <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span>
                     <span style={{ fontSize: 15, fontWeight: 600 }}>Done</span>
-                    <span className="chip chip-neutral num">{doneRows.length}</span>
+                    <br />
+                    <span className="cap num">
+                      {doneRows.length} mandate{doneRows.length === 1 ? "" : "s"}
+                    </span>
                   </span>
-                  <IconChevronDown />
+                  <span className="chevring">
+                    <IconChevronDown />
+                  </span>
                 </button>
                 <Fold open={doneOpen}>
                   {doneRows.map((row) => (
@@ -603,10 +616,13 @@ export default function DashboardPage() {
                     >
                       <span>
                         <span style={{ fontSize: 15, fontWeight: 600 }}>
-                          {row.kind === "DCA" ? "DCA" : row.kind === "limit" ? "Limit" : "Stop"} #{row.id}
+                          {row.kind === "DCA" ? "DCA" : row.kind === "limit" ? "Limit" : "Stop-loss"} #{row.id}
                         </span>
                         <br />
-                        <span className="cap">{row.status}</span>
+                        <span className="cap">
+                          {row.status} · {row.side.toLowerCase()}{" "}
+                          {row.kind === "DCA" ? "DCA" : row.kind}
+                        </span>
                       </span>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
                         {row.status === "Settled" ? (

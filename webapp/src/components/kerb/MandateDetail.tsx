@@ -12,8 +12,10 @@ import { Star } from "@/components/kerb/ui/Star";
 import { Tabs } from "@/components/kerb/ui/Tabs";
 import { Ticker } from "@/components/kerb/ui/Ticker";
 import {
+  IconArrowLeft,
   IconCandles,
   IconCheck,
+  IconChevronDown,
   IconCopy,
   IconFullscreen,
   IconLine,
@@ -59,7 +61,13 @@ const RANGE_TABS = ["1H", "1D", "1W", "1M", "3M", "YTD", "1Y"] as const;
 type RangeKey = (typeof RANGE_TABS)[number];
 type PaneKey = "pending" | "fills" | "history";
 type ChartStyle = "candles" | "line";
-type LadderMode = "chart" | "slices";
+
+/** Points per curve, by candle interval: finer candles, denser curve. */
+const INTERVAL_POINTS: Readonly<Record<string, number>> = {
+  "1h": 96,
+  "1d": 64,
+  "1w": 32,
+};
 
 /**
  * Timeline derived from the on-chain status alone. Timestamps and hashes need
@@ -151,7 +159,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
   const [chartStyle, setChartStyle] = useState<ChartStyle>("line");
   const [interval, setIntervalKey] = useState("1d");
   const [expiry, setExpiry] = useState("Sep 8 (28d)");
-  const [ladderMode, setLadderMode] = useState<LadderMode>("slices");
+  const [ladderOpen, setLadderOpen] = useState(true);
   const [ladderSide, setLadderSide] = useState<"sell" | "buy">("sell");
   const [pane, setPane] = useState<PaneKey>("fills");
   const [tallChart, setTallChart] = useState(false);
@@ -190,6 +198,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
     : awaitingDeposit
       ? 0n
       : (mandate?.filledCents ?? 0n);
+  const totalCents = mandate?.totalCents ?? 250_000n;
   const timeline = isLive
     ? buildLiveTimeline(baseStatus)
     : buildDemoTimeline(executing || dimmed);
@@ -204,8 +213,13 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
 
   const priceFloat = Number(price.priceMicro) / 1_000_000;
   const series = useMemo(
-    () => buildRangeSeries(range, 64, priceFloat),
-    [range, priceFloat],
+    () =>
+      buildRangeSeries(
+        `${range}:${interval}`,
+        INTERVAL_POINTS[interval] ?? 64,
+        priceFloat,
+      ),
+    [range, interval, priceFloat],
   );
   const hoverLabels = useMemo(
     () =>
@@ -377,6 +391,13 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <Link
+                  href="/app"
+                  className="btn-icon"
+                  aria-label="Back to dashboard"
+                >
+                  <IconArrowLeft />
+                </Link>
                 <button
                   type="button"
                   className="btn-icon railbtn-hdr"
@@ -578,7 +599,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             <div style={{ marginTop: 16, position: "relative" }}>
               <HalftoneChart
                 series={series}
-                swapKey={range}
+                swapKey={`${range}:${interval}`}
                 className="chartsvg"
                 heightPx={tallChart ? 400 : 248}
                 hoverLabels={hoverLabels}
@@ -587,27 +608,46 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             </div>
           </section>
 
-          <div className="rise" style={{ animationDelay: "120ms", marginTop: 40 }}>
-            <Tabs
-              className="big"
-              ariaLabel="Chart or slices"
-              tabs={[
-                { id: "chart" as LadderMode, label: "Chart" },
-                { id: "slices" as LadderMode, label: "Slices" },
-              ]}
-              selected={ladderMode}
-              onSelect={setLadderMode}
-            />
-            <Fold open={ladderMode === "slices"}>
-              <section
-                aria-label="Slice ladder"
-                style={{
-                  marginTop: 16,
-                  background: "var(--card)",
-                  borderRadius: 16,
-                  padding: "12px 8px 12px",
-                }}
-              >
+          <section
+            className="card rise"
+            aria-label="Slice ladder"
+            style={{ animationDelay: "120ms", marginTop: 40, padding: 8 }}
+          >
+            <button
+              type="button"
+              className="secthead"
+              aria-expanded={ladderOpen}
+              aria-controls="ladder-region"
+              onClick={() => setLadderOpen((open) => !open)}
+            >
+              <span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>Slices</span>
+                <br />
+                <span className="cap">
+                  {isLive
+                    ? "sizes sealed until they fill"
+                    : "5 slices, sorted high to low"}
+                </span>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+                  <Ticker
+                    value={
+                      isLive
+                        ? formatXrpCents(filledCents)
+                        : `${formatXrpCents(filledCents)} / ${formatXrpCents(totalCents)}`
+                    }
+                    style={{ fontWeight: 600 }}
+                  />
+                  <span className="cap">XRP</span>
+                </span>
+                <span className="chevring">
+                  <IconChevronDown />
+                </span>
+              </span>
+            </button>
+            <Fold open={ladderOpen}>
+              <div id="ladder-region" role="region" aria-label="Slice ladder rows">
                 <div
                   style={{
                     display: "flex",
@@ -737,14 +777,14 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                     </div>
                   </>
                 )}
-              </section>
+              </div>
             </Fold>
-          </div>
+          </section>
 
           <section
             className="card rise"
             aria-label="Sealed strategy"
-            style={{ animationDelay: "150ms", marginTop: 48 }}
+            style={{ animationDelay: "150ms", marginTop: 40 }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 600 }}>Sealed strategy</h2>
             <p className="cap" style={{ marginTop: 4 }}>
@@ -790,7 +830,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             <section
               className="card rise"
               aria-label="Deposit"
-              style={{ animationDelay: "165ms", marginTop: 48 }}
+              style={{ animationDelay: "165ms", marginTop: 40 }}
             >
               <h2 style={{ fontSize: 18, fontWeight: 600 }}>Deposit</h2>
               <div style={{ height: 1, background: "var(--hairline)", margin: "12px 0 14px" }} />
@@ -836,7 +876,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
           <section
             className="rise"
             aria-label="Mandate facts"
-            style={{ animationDelay: "180ms", marginTop: 48 }}
+            style={{ animationDelay: "180ms", marginTop: 40 }}
           >
             <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
               Mandate facts
@@ -948,7 +988,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
           <section
             className="rise"
             aria-label="Activity"
-            style={{ animationDelay: "210ms", marginTop: 48 }}
+            style={{ animationDelay: "210ms", marginTop: 40 }}
           >
             <Tabs
               className="big"
