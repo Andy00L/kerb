@@ -17,7 +17,7 @@ attestations.
   <img src="https://img.shields.io/badge/execution-XRPL%20testnet%20DEX-78716C" alt="execution badge" />
   <img src="https://img.shields.io/badge/triggers-FTSOv2%20block--latency-E86A33" alt="triggers badge" />
   <img src="https://img.shields.io/badge/proofs-FDC%20XRPPayment-2FA57C" alt="proofs badge" />
-  <img src="https://img.shields.io/badge/tests-72%20passing-2FA57C" alt="tests badge" />
+  <img src="https://img.shields.io/badge/tests-85%20passing-2FA57C" alt="tests badge" />
 </p>
 
 ![The mandate detail screen: live FTSOv2 price, the occluded trigger band, and the sealed strategy panel](docs/screenshots/01-mandate-detail.png)
@@ -51,11 +51,12 @@ verification.
   FTSOv2 XRP/USD block-latency feed and only fires after 3 consecutive
   confirming reads; DCA mandates are paced by `everySec` and capped by
   `times`.
-- **Sliced, jittered orders.** Fills go out as XRPL `OfferCreate` with
-  `tfImmediateOrCancel`, sliced with up to 50% size jitter
+- **Sliced, jittered, measured orders.** Fills go out as XRPL `OfferCreate`
+  with `tfImmediateOrCancel`, sliced with up to 50% size jitter
   ([`typescript/src/app/xrpl.ts`](typescript/src/app/xrpl.ts)), so the book
-  never sees the total or a regular drip. All money math is integer BigInt;
-  no float ever touches an amount.
+  never sees the total or a regular drip. Fills are counted from the
+  validated balance change, not assumed from the order size. All money math
+  is integer BigInt; no float ever touches an amount.
 - **Per-mandate deposit accounts.** Each mandate gets its own XRPL account,
   derived in the enclave with HMAC-SHA256 from a sealed master seed
   ([`typescript/src/app/wallet.ts`](typescript/src/app/wallet.ts)); the key
@@ -104,6 +105,9 @@ flowchart TD
 Ember, inside the enclave; green, proven on Coston2; grey, the public XRPL
 side.
 
+The full trust model, signing boundaries and failure paths are in
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
 When things do not go well: a slice that finds no liquidity is cancelled by
 `tfImmediateOrCancel` and retried on the next confirmed trigger; a
 cancellation that lands on-chain stops execution because the enclave re-reads
@@ -130,8 +134,8 @@ Prerequisites: Node 20+, Bun 1.3+, Docker (only for the Solidity and Go
 checks, which run through the pinned toolchain shims in `scripts/bin/`).
 
 ```bash
-# Enclave logic: 72 tests (mandate validation, trigger logic, slicing,
-# settlement, DCA pacing, FDC constants)
+# Enclave logic: 85 tests (mandate validation, trigger logic, slicing,
+# measured fills, settlement, DCA pacing, FDC constants)
 cd typescript && npm install && npm test
 
 # The dApp: production build
@@ -142,7 +146,7 @@ cd .. && ./scripts/bin/forge build
 cd go/tools && ../../scripts/bin/go build ./... && ../../scripts/bin/go vet ./...
 ```
 
-Success looks like: vitest reports `Tests  72 passed (72)`, `next build`
+Success looks like: vitest reports `Tests  85 passed (85)`, `next build`
 prints the four routes, and both Go commands exit silently with code 0. The
 webapp then runs with `bun run dev` inside `webapp/` and needs no
 configuration: without `NEXT_PUBLIC_INSTRUCTION_SENDER` it serves the demo
@@ -157,12 +161,13 @@ proof flow) is documented step by step in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 - **The TEE runs simulated.** `SIMULATED_TEE=true` on Coston2, the
   documented development mode for this hackathon; the same images deploy to
   GCP Confidential Space unchanged.
-- **The webapp's mandate list is a demo dataset.** The shapes mirror the
-  enclave records exactly ([`webapp/src/lib/demo.ts`](webapp/src/lib/demo.ts));
-  the live price on every screen is the real FTSOv2 feed, and the live
-  `createMandate` path (ECIES to the enclave key, wallet transaction) is
-  implemented behind two environment variables that activate after
-  deployment.
+- **The webapp's dashboard list is a demo dataset.** The shapes mirror the
+  enclave records exactly ([`webapp/src/lib/demo.ts`](webapp/src/lib/demo.ts)).
+  The live price on every screen is the real FTSOv2 feed, and with the two
+  `NEXT_PUBLIC_*` deployment variables set, the create flow seals with
+  go-ethereum-compatible ECIES and submits for real, while the detail screen
+  reads status, deposit address and fills from the contract. Per-slice
+  history and the dashboard list still need an indexer.
 - **Demo liquidity is ours.** The XRPL testnet book is empty, so
   [`typescript/src/tools/market-maker.ts`](typescript/src/tools/market-maker.ts)
   issues a test USD and quotes both sides around the live FTSO price. It runs
@@ -171,9 +176,14 @@ proof flow) is documented step by step in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
   fetched from the proxy and relayed by
   [`typescript/src/tools/keeper.ts`](typescript/src/tools/keeper.ts). The
   contract checks the TEE signature, so the relayer needs no trust.
-- **Not yet exercised against Coston2.** Contract deployment, TEE
-  registration and the end-to-end FDC proof flow are scripted but had not
-  run live at the time of this commit; the runbook is the exact sequence.
+- **Live on Coston2, except the FDC round trip.** Contract deployment
+  (`config/extension.env`: InstructionSender
+  `0xF2a1f3fA72a0FF4989b6610001159f39D43409B7`, extension id `0x...101ab`),
+  TEE registration, instruction delivery and signed result relay have all
+  run live; the lessons are recorded in
+  [`docs/RUNBOOK.md`](docs/RUNBOOK.md). The FDC proof flow
+  (`proveDeposit` / `proveSettlement`) is scripted and compiled but has not
+  yet been exercised against a live voting round.
 
 ## 📦 Repository layout
 
@@ -197,3 +207,8 @@ Built solo for the Flare Summer Signal hackathon, track 2, on the official
 Flare protocols are load-bearing, not decorative: FTSOv2 is the only trigger
 source, FDC is the only way a mandate becomes Funded or Settled, and the FCC
 extension is where the strategy lives and signs.
+
+Everything was built during the program, dated in
+[`docs/WHATS_NEW.md`](docs/WHATS_NEW.md). The roadmap is to become the client
+application of Protocol Managed Wallets the day the API opens: the seam-by-
+seam mapping is in [`docs/PMW_MIGRATION.md`](docs/PMW_MIGRATION.md).

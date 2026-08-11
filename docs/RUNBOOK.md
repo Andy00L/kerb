@@ -210,7 +210,7 @@ makes every update after the first silently rejected.
 ## 7. Verification available without Docker
 
 ```bash
-cd typescript && npx tsc --noEmit && npx vitest run   # 28 tests
+cd typescript && npx tsc --noEmit && npx vitest run   # 85 tests
 ../.scratch/bin/solc --via-ir --optimize --bin --abi \
   -o ../.scratch/solc-out --overwrite ../contracts/InstructionSender.sol
 ```
