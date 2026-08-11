@@ -1,36 +1,31 @@
 "use client";
 
 /**
- * The wallet dropdown, anchored to the header chip.
+ * The wallet picker, as a centered modal dialog.
  *
  * Three states, one panel: installed wallets to pick from (EIP-6963), real
  * wallet proposals when nothing is installed, and the labelled demo identity
- * as the always-available last row. Escape closes, arrows move, a click
- * outside dismisses.
+ * as the always-available last row. Escape closes, arrows move, a click on
+ * the dimmed backdrop dismisses.
  */
 
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useWallet } from "@/components/kerb/WalletProvider";
 import { WALLET_PROPOSALS } from "@/lib/wallets";
-import { IconOpen } from "@/components/kerb/ui/icons";
+import { IconClose, IconOpen } from "@/components/kerb/ui/icons";
 
 export function WalletPicker() {
   const { wallets, connectedRdns, isPickerOpen, connectWith, connectDemo, closePicker } =
     useWallet();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Synchronizes with document-level pointer and key events, systems React
-  // does not own: a click outside or Escape dismisses the panel.
+  // Synchronizes with document-level key events, a system React does not
+  // own: Escape dismisses, arrows move between options.
   useEffect(() => {
     if (!isPickerOpen) {
       return;
     }
-    const dismissOnOutsidePress = (event: PointerEvent): void => {
-      const panel = panelRef.current;
-      if (panel !== null && !panel.parentElement?.contains(event.target as Node)) {
-        closePicker();
-      }
-    };
     const handleKeys = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         closePicker();
@@ -55,15 +50,13 @@ export function WalletPicker() {
       const nextIndex = (activeIndex + step + items.length) % items.length;
       items[nextIndex]?.focus();
     };
-    document.addEventListener("pointerdown", dismissOnOutsidePress);
     document.addEventListener("keydown", handleKeys);
     return () => {
-      document.removeEventListener("pointerdown", dismissOnOutsidePress);
       document.removeEventListener("keydown", handleKeys);
     };
   }, [isPickerOpen, closePicker]);
 
-  // Focus lands on the first option when the panel opens (keyboard path).
+  // Focus lands on the first option when the dialog opens (keyboard path).
   useEffect(() => {
     if (isPickerOpen) {
       panelRef.current
@@ -72,26 +65,58 @@ export function WalletPicker() {
     }
   }, [isPickerOpen]);
 
-  return (
+  if (!isPickerOpen) {
+    return null;
+  }
+
+  // Portaled to <body>: entrance animations up the tree keep filling stacking
+  // contexts, which would trap and clip a fixed overlay rendered in place.
+  return createPortal(
     <div
-      ref={panelRef}
-      className={`menu${isPickerOpen ? " open" : ""}`}
-      role="menu"
-      aria-label="Wallet selection"
-      style={{ minWidth: 240 }}
+      className="overlay"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          closePicker();
+        }
+      }}
     >
-      {wallets.length > 0 ? (
-        <>
-          <div className="cap" style={{ padding: "8px 12px 4px" }}>
-            Installed wallets
-          </div>
-          {wallets.map((wallet) => (
+      <div
+        ref={panelRef}
+        className="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connect a wallet"
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "8px 4px 4px 12px",
+          }}
+        >
+          <span style={{ fontSize: 15, fontWeight: 600 }}>Connect a wallet</span>
+          <button
+            type="button"
+            className="btn-icon"
+            aria-label="Close"
+            onClick={closePicker}
+          >
+            <IconClose />
+          </button>
+        </div>
+        <p className="cap" style={{ padding: "0 12px 10px" }}>
+          Pick an installed wallet, or use the demo identity to walk every
+          flow on sample data.
+        </p>
+        {wallets.length > 0 ? (
+          wallets.map((wallet) => (
             <button
               key={wallet.rdns}
               type="button"
               role="menuitem"
               className="mitem"
-              tabIndex={isPickerOpen ? 0 : -1}
               style={{ justifyContent: "flex-start" }}
               onClick={() => {
                 void connectWith(wallet);
@@ -101,8 +126,8 @@ export function WalletPicker() {
                 <span
                   aria-hidden
                   style={{
-                    width: 20,
-                    height: 20,
+                    width: 22,
+                    height: 22,
                     borderRadius: 6,
                     background: "var(--card-hover)",
                     border: "1px solid var(--hairline)",
@@ -116,55 +141,53 @@ export function WalletPicker() {
                   src={wallet.icon}
                   alt=""
                   aria-hidden
-                  style={{ width: 20, height: 20, borderRadius: 6, flex: "none" }}
+                  style={{ width: 22, height: 22, borderRadius: 6, flex: "none" }}
                 />
               )}
-              <span style={{ flex: 1, textAlign: "left" }}>{wallet.name}</span>
+              <span style={{ flex: 1, textAlign: "left", fontSize: 14, color: "var(--ink)" }}>
+                {wallet.name}
+              </span>
               {connectedRdns === wallet.rdns ? (
                 <span className="chip chip-up">connected</span>
               ) : null}
             </button>
-          ))}
-        </>
-      ) : (
-        <>
-          <p className="cap" style={{ padding: "8px 12px 4px" }}>
-            No wallet extension detected.
-          </p>
-          <div className="cap" style={{ padding: "8px 12px 4px" }}>
-            Get one
-          </div>
-          {WALLET_PROPOSALS.map((proposal) => (
-            <a
-              key={proposal.name}
-              href={proposal.url}
-              target="_blank"
-              rel="noreferrer"
-              role="menuitem"
-              className="mitem"
-              tabIndex={isPickerOpen ? 0 : -1}
-            >
-              <span>{proposal.name}</span>
-              <IconOpen />
-            </a>
-          ))}
-        </>
-      )}
-      <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
-      <button
-        type="button"
-        role="menuitem"
-        className="mitem"
-        tabIndex={isPickerOpen ? 0 : -1}
-        style={{ height: "auto", padding: "8px 12px" }}
-        onClick={connectDemo}
-      >
-        <span style={{ textAlign: "left" }}>
-          Demo identity
-          <br />
-          <span className="cap">walk every flow on sample data</span>
-        </span>
-      </button>
-    </div>
+          ))
+        ) : (
+          <>
+            <p className="cap" style={{ padding: "0 12px 6px" }}>
+              No wallet extension detected. Get one:
+            </p>
+            {WALLET_PROPOSALS.map((proposal) => (
+              <a
+                key={proposal.name}
+                href={proposal.url}
+                target="_blank"
+                rel="noreferrer"
+                role="menuitem"
+                className="mitem"
+              >
+                <span style={{ fontSize: 14, color: "var(--ink)" }}>{proposal.name}</span>
+                <IconOpen />
+              </a>
+            ))}
+          </>
+        )}
+        <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
+        <button
+          type="button"
+          role="menuitem"
+          className="mitem"
+          style={{ height: "auto", padding: "10px 12px" }}
+          onClick={connectDemo}
+        >
+          <span style={{ textAlign: "left" }}>
+            <span style={{ fontSize: 14, color: "var(--ink)" }}>Demo identity</span>
+            <br />
+            <span className="cap">walk every flow on sample data</span>
+          </span>
+        </button>
+      </div>
+    </div>,
+    document.body,
   );
 }

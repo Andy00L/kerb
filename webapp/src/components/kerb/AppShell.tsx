@@ -91,29 +91,26 @@ export function WalletCluster() {
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <span className="chip chip-neutral hact">Flare Coston2</span>
       <span className="chip chip-neutral hact">XRPL Testnet</span>
-      <div className="menuwrap">
-        <button
-          type="button"
-          className="btn btn-quiet num"
-          aria-haspopup="menu"
-          aria-expanded={isPickerOpen}
-          data-state={isPickerOpen ? "open" : "closed"}
-          onClick={() => {
-            if (isPickerOpen) {
-              closePicker();
-              return;
-            }
-            void connect();
-          }}
-        >
-          {address === null
-            ? "Connect"
-            : isDemo
-              ? "demo identity"
-              : truncateMiddle(address, 6, 4)}
-        </button>
-        <WalletPicker />
-      </div>
+      <button
+        type="button"
+        className="btn btn-quiet num"
+        aria-haspopup="dialog"
+        aria-expanded={isPickerOpen}
+        onClick={() => {
+          if (isPickerOpen) {
+            closePicker();
+            return;
+          }
+          void connect();
+        }}
+      >
+        {address === null
+          ? "Connect"
+          : isDemo
+            ? "demo identity"
+            : truncateMiddle(address, 6, 4)}
+      </button>
+      <WalletPicker />
     </div>
   );
 }

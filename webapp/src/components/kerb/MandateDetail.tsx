@@ -99,6 +99,15 @@ const LADDER_BOTTOM: readonly LadderRow[] = [
   { slice: "#1", amount: "87.61", fill: "249.39", pending: false },
 ];
 
+/** Human name of a mandate kind, matching the dashboard's row titles. */
+function kindLabel(kind: string): string {
+  return kind === "DCA" || kind === "dca"
+    ? "DCA"
+    : kind === "limit"
+      ? "Limit"
+      : "Stop-loss";
+}
+
 const DEMO_FILLS: ReadonlyArray<readonly [string, string, string, string]> = [
   ["Slice #4", "105.44 XRP", "300.19 USD", "Aug 10, 14:22"],
   ["Slice #3", "98.20 XRP", "279.55 USD", "Aug 9, 09:10"],
@@ -147,6 +156,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
   const [pane, setPane] = useState<PaneKey>("fills");
   const [tallChart, setTallChart] = useState(false);
   const [railOpen, setRailOpen] = useState(false);
+  const [hintOpen, setHintOpen] = useState(true);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const price = useLivePrice(true);
 
@@ -309,23 +319,53 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             key={entry.id}
             className="railchip num"
             href={`/app/m/${entry.id}`}
+            title={`${kindLabel(entry.kind)} #${entry.id}`}
             aria-label={
               entry.id === currentId
-                ? `Mandate M${entry.id}, current`
-                : `Mandate M${entry.id}`
+                ? `${kindLabel(entry.kind)} #${entry.id}, current`
+                : `${kindLabel(entry.kind)} #${entry.id}`
             }
             aria-current={entry.id === currentId ? "true" : undefined}
           >
-            M{entry.id}
+            #{entry.id}
           </Link>
         ))}
       </nav>
 
       <main style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
         <div style={{ width: "100%", maxWidth: 1100, padding: "24px 24px 80px" }}>
-          <h1 className="vh">
-            Mandate M{currentId}: XRP/USD {mandate?.kind ?? "stop"}
-          </h1>
+          {hintOpen ? (
+            <div
+              className="card rise"
+              style={{
+                marginBottom: 20,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 16,
+                padding: "14px 16px",
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>
+                  This is one mandate&apos;s cockpit
+                </span>
+                <br />
+                <span className="cap" style={{ fontSize: 13 }}>
+                  Live FTSO price and chart on top, the Slices ladder shows how
+                  execution is cut, proofs and history sit below. The left rail
+                  (#7 to #2) jumps between your mandates.
+                </span>
+              </span>
+              <button
+                type="button"
+                className="btn btn-compact"
+                style={{ flex: "none" }}
+                onClick={() => setHintOpen(false)}
+              >
+                Got it
+              </button>
+            </div>
+          ) : null}
           <header className="rise" style={{ animationDelay: "30ms" }}>
             <div
               style={{
@@ -336,7 +376,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
                   className="btn-icon railbtn-hdr"
@@ -348,6 +388,18 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                 >
                   <IconRail />
                 </button>
+                <h1
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                    marginRight: 4,
+                  }}
+                >
+                  {isLive
+                    ? `Mandate #${currentId}`
+                    : `${kindLabel(mandate?.kind ?? "stop")} #${currentId}`}
+                </h1>
                 <span className="chip chip-neutral">
                   <span
                     style={{
@@ -360,9 +412,9 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                   />
                   XRP/USD
                 </span>
-                <span className="chip chip-neutral">
-                  {isLive ? "kind sealed" : (mandate?.kind ?? "stop")}
-                </span>
+                {isLive ? (
+                  <span className="chip chip-neutral">kind sealed</span>
+                ) : null}
                 <span className="chip chip-neutral">{status}</span>
                 <Star ariaLabel="Watch this mandate" />
               </div>

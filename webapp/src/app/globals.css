@@ -565,6 +565,55 @@ input::placeholder {
   opacity: 1;
 }
 
+/* == Modal dialog (wallet picker) ========================================= */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 13, 13, 0.65);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 24px 24px;
+  z-index: 60;
+  animation: overlayin 180ms var(--ease) both;
+}
+
+@keyframes overlayin {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dialog {
+  width: min(400px, 100%);
+  background: var(--bg-elev);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  padding: 8px;
+  animation: dialogin 180ms var(--ease) both;
+  transform-origin: top;
+}
+
+@keyframes dialogin {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dialog .mitem {
+  height: 44px;
+}
+
 /* == Wells (inputs) ======================================================= */
 
 .well {
