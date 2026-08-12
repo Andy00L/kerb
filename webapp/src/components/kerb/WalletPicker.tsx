@@ -13,11 +13,21 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useWallet } from "@/components/kerb/WalletProvider";
 import { WALLET_PROPOSALS } from "@/lib/wallets";
+import { truncateMiddle } from "@/lib/format";
 import { IconClose, IconOpen } from "@/components/kerb/ui/icons";
 
 export function WalletPicker() {
-  const { wallets, connectedRdns, isPickerOpen, connectWith, connectDemo, closePicker } =
-    useWallet();
+  const {
+    address,
+    isDemo,
+    wallets,
+    connectedRdns,
+    isPickerOpen,
+    connectWith,
+    connectDemo,
+    disconnect,
+    closePicker,
+  } = useWallet();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Synchronizes with document-level key events, a system React does not
@@ -165,8 +175,24 @@ export function WalletPicker() {
                 rel="noreferrer"
                 role="menuitem"
                 className="mitem"
+                style={{ justifyContent: "flex-start" }}
               >
-                <span style={{ fontSize: 14, color: "var(--ink)" }}>{proposal.name}</span>
+                {/* Official brand marks, bundled locally under public/wallets. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={proposal.icon}
+                  alt=""
+                  aria-hidden
+                  style={{
+                    width: 22,
+                    height: 22,
+                    objectFit: "contain",
+                    flex: "none",
+                  }}
+                />
+                <span style={{ flex: 1, textAlign: "left", fontSize: 14, color: "var(--ink)" }}>
+                  {proposal.name}
+                </span>
                 <IconOpen />
               </a>
             ))}
@@ -181,11 +207,35 @@ export function WalletPicker() {
           onClick={connectDemo}
         >
           <span style={{ textAlign: "left" }}>
-            <span style={{ fontSize: 14, color: "var(--ink)" }}>Demo identity</span>
+            <span style={{ fontSize: 14, color: "var(--ink)" }}>
+              Demo identity
+              {isDemo ? (
+                <span className="chip chip-up" style={{ marginLeft: 8 }}>
+                  connected
+                </span>
+              ) : null}
+            </span>
             <br />
             <span className="cap">walk every flow on sample data</span>
           </span>
         </button>
+        {address !== null ? (
+          <>
+            <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
+            <button
+              type="button"
+              role="menuitem"
+              className="mitem"
+              style={{ color: "var(--down)" }}
+              onClick={disconnect}
+            >
+              <span style={{ fontSize: 14 }}>Disconnect</span>
+              <span className="cap num">
+                {isDemo ? "demo identity" : truncateMiddle(address, 6, 4)}
+              </span>
+            </button>
+          </>
+        ) : null}
       </div>
     </div>,
     document.body,

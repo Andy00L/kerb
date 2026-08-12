@@ -102,12 +102,16 @@ export function discoverWallets(): DetectedWallet[] {
   );
 }
 
-/** Wallets proposed when none is installed. Real products, official sites. */
+/**
+ * Wallets proposed when none is installed. Real products, official sites;
+ * the icons are the official brand marks, bundled under public/wallets/.
+ */
 export const WALLET_PROPOSALS: ReadonlyArray<{
   readonly name: string;
   readonly url: string;
+  readonly icon: string;
 }> = [
-  { name: "MetaMask", url: "https://metamask.io/download/" },
-  { name: "Rabby", url: "https://rabby.io/" },
-  { name: "Brave Wallet", url: "https://brave.com/wallet/" },
+  { name: "MetaMask", url: "https://metamask.io/download/", icon: "/wallets/metamask.svg" },
+  { name: "Rabby", url: "https://rabby.io/", icon: "/wallets/rabby.png" },
+  { name: "Brave Wallet", url: "https://brave.com/wallet/", icon: "/wallets/brave.svg" },
 ];

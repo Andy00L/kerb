@@ -40,6 +40,7 @@ export interface WalletState {
   readonly connect: () => Promise<void>;
   readonly connectWith: (wallet: DetectedWallet) => Promise<void>;
   readonly connectDemo: () => void;
+  readonly disconnect: () => void;
   readonly closePicker: () => void;
 }
 
@@ -53,6 +54,7 @@ const WalletContext = createContext<WalletState>({
   connect: async () => {},
   connectWith: async () => {},
   connectDemo: () => {},
+  disconnect: () => {},
   closePicker: () => {},
 });
 
@@ -103,6 +105,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setPickerOpen(false);
   }, []);
 
+  // Forgets the session's connection state. Injected wallets keep their own
+  // site permission; revoking that lives in the wallet, not the page.
+  const disconnect = useCallback((): void => {
+    setAddress(null);
+    setIsDemo(false);
+    setProvider(null);
+    setConnectedRdns(null);
+    setPickerOpen(false);
+  }, []);
+
   const connect = useCallback(async (): Promise<void> => {
     const detected = discoverWallets();
     setWallets(detected);
@@ -132,6 +144,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connect,
       connectWith,
       connectDemo,
+      disconnect,
       closePicker,
     }),
     [
@@ -144,6 +157,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connect,
       connectWith,
       connectDemo,
+      disconnect,
       closePicker,
     ],
   );
