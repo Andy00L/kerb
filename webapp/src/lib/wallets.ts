@@ -25,7 +25,10 @@ interface Eip6963ProviderInfo {
 export interface DetectedWallet {
   readonly rdns: string;
   readonly name: string;
-  /** Data-URI icon from the wallet itself, null for the legacy fallback. */
+  /**
+   * Data-URI icon from the wallet itself, a bundled /wallets/ path for
+   * wallets recognized by namespace, null for the legacy fallback.
+   */
   readonly icon: string | null;
   readonly provider: Eip1193Provider;
 }
@@ -40,6 +43,8 @@ interface Eip6963AnnounceEvent extends Event {
 declare global {
   interface Window {
     ethereum?: Eip1193Provider;
+    /** Phantom namespaces its EVM provider; it may skip EIP-6963. */
+    phantom?: { ethereum?: Eip1193Provider };
   }
 }
 
@@ -87,6 +92,19 @@ export function discoverWallets(): DetectedWallet[] {
   window.dispatchEvent(new Event("eip6963:requestProvider"));
   window.removeEventListener("eip6963:announceProvider", recordAnnouncement);
 
+  // Phantom versions that do not announce over EIP-6963 still expose
+  // window.phantom.ethereum; without this it degrades to "Browser wallet".
+  const phantomProvider = window.phantom?.ethereum;
+  if (!seenRdns.has("app.phantom") && phantomProvider !== undefined) {
+    seenRdns.add("app.phantom");
+    found.push({
+      rdns: "app.phantom",
+      name: "Phantom",
+      icon: "/wallets/phantom.png",
+      provider: phantomProvider,
+    });
+  }
+
   if (found.length === 0 && window.ethereum !== undefined) {
     // Pre-6963 wallet: present, but it does not identify itself.
     found.push({
@@ -112,6 +130,7 @@ export const WALLET_PROPOSALS: ReadonlyArray<{
   readonly icon: string;
 }> = [
   { name: "MetaMask", url: "https://metamask.io/download/", icon: "/wallets/metamask.svg" },
+  { name: "Phantom", url: "https://phantom.com/download", icon: "/wallets/phantom.png" },
   { name: "Rabby", url: "https://rabby.io/", icon: "/wallets/rabby.png" },
   { name: "Brave Wallet", url: "https://brave.com/wallet/", icon: "/wallets/brave.svg" },
 ];

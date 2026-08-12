@@ -488,43 +488,27 @@ input::placeholder {
 
 /* == Menus (system 13) ==================================================== */
 
-.menuwrap {
-  position: relative;
-}
-
+/* Portaled to <body> with fixed viewport coordinates: entrance animations
+   up the tree (.rise, fill-mode both) keep composited stacking contexts
+   alive, so an in-place panel would be painted over by later siblings. */
 .menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  position: fixed;
   min-width: 176px;
   background: var(--bg-elev);
   border: 1px solid var(--hairline);
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   padding: 6px;
-  opacity: 0;
-  transform: translateY(-4px) scale(0.98);
   transform-origin: top;
-  visibility: hidden;
-  transition:
-    opacity 120ms var(--ease),
-    transform 120ms var(--ease),
-    visibility 0s 120ms;
-  z-index: 30;
+  z-index: 70;
+  animation: menuin 160ms var(--ease);
 }
 
-.menu.open {
-  opacity: 1;
-  transform: none;
-  visibility: visible;
-  transition:
-    opacity 180ms var(--ease),
-    transform 180ms var(--ease);
-}
-
-.menu.left {
-  right: auto;
-  left: 0;
+@keyframes menuin {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
 }
 
 .mitem {
