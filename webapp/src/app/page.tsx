@@ -65,7 +65,7 @@ export default function LandingPage() {
           minHeight: "92vh",
           display: "flex",
           flexDirection: "column",
-          background: "#ece8e4",
+          background: "#e6e1db",
         }}
       >
         <Image
@@ -74,7 +74,14 @@ export default function LandingPage() {
           fill
           priority
           sizes="100vw"
-          style={{ objectFit: "cover", objectPosition: "82% 56%" }}
+          style={{
+            objectFit: "cover",
+            objectPosition: "82% 56%",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, black 0%, black 88%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, black 0%, black 88%, transparent 100%)",
+          }}
         />
         <header
           className="rise"
@@ -228,10 +235,30 @@ export default function LandingPage() {
       </section>
 
       <main>
-
+        <div style={{ position: "relative" }}>
+          {/* Dusk plate: carries the hero's pale mist down into the charcoal
+              page; its own pixels fade out long before the section ends. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/landing/dusk.webp"
+            alt=""
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "auto",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 0%, black 72%, transparent 100%)",
+              maskImage:
+                "linear-gradient(to bottom, black 0%, black 72%, transparent 100%)",
+            }}
+          />
+          <div style={{ position: "relative" }}>
         <section
           className="rise"
-          style={{ animationDelay: "150ms", maxWidth: 980, margin: "56px auto 0", padding: "0 24px" }}
+          style={{ animationDelay: "150ms", maxWidth: 980, margin: "0 auto", padding: "56px 24px 0" }}
           aria-label="Live preview"
         >
           <div className="card" style={{ padding: 24 }}>
@@ -389,6 +416,8 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+          </div>
+        </div>
 
         <section
           className="rise"
@@ -498,7 +527,8 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer style={{ maxWidth: 1100, margin: "64px auto 0", padding: "0 24px 32px" }}>
+      <footer style={{ margin: "64px auto 0", padding: 0 }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
         <div style={{ height: 1, background: "var(--hairline)" }} />
         <div
           className="cap"
@@ -522,6 +552,24 @@ export default function LandingPage() {
             XRPL testnet explorer
           </a>
           <span style={{ marginLeft: "auto" }}>Built on Flare + XRPL</span>
+        </div>
+        </div>
+        <div aria-hidden style={{ overflow: "hidden", marginTop: 48 }}>
+          <div
+            style={{
+              fontSize: "clamp(110px, 28vw, 400px)",
+              fontWeight: 600,
+              letterSpacing: "-0.03em",
+              lineHeight: 1,
+              color: "var(--ink)",
+              textAlign: "center",
+              transform: "translateY(0.14em)",
+              whiteSpace: "nowrap",
+              userSelect: "none",
+            }}
+          >
+            Kerb
+          </div>
         </div>
       </footer>
     </div>
