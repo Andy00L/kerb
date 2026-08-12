@@ -4,9 +4,14 @@
 :root {
   --bg: #0d0d0d;
   --bg-elev: #161514;
-  --card: #1a1918;
-  --card-hover: #21201e;
-  --well: #131211;
+  /* Smoked-glass surfaces: white-alpha veils over the charcoal, so panels
+     read luminous instead of painted. Composite over --bg stays ~#1a1a1a. */
+  --card: rgba(252, 252, 252, 0.055);
+  --card-hover: rgba(252, 252, 252, 0.09);
+  --well: rgba(252, 252, 252, 0.028);
+  /* True glass for floating layers that have content beneath to refract. */
+  --glass: rgba(22, 21, 20, 0.72);
+  --glass-blur: blur(20px) saturate(1.5);
   --hairline: rgba(252, 252, 252, 0.08);
   --hairline-strong: rgba(252, 252, 252, 0.14);
   --ink: #fcfcfc;
@@ -624,7 +629,9 @@ input::placeholder {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(13, 13, 13, 0.65);
+  background: rgba(13, 13, 13, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -668,6 +675,17 @@ input::placeholder {
 
 .dialog .mitem {
   height: 44px;
+}
+
+/* Real glass only where content actually sits beneath to refract; solid
+   --bg-elev stays as the fallback when backdrop-filter is unsupported. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .menu,
+  .dialog {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
 }
 
 /* == Wells (inputs) ======================================================= */
@@ -1459,6 +1477,19 @@ input::placeholder {
   }
   .slicerow {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* The fixed mobile bars float over scrolling content: same glass, same
+   solid fallback. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  @media (max-width: 720px) {
+    .sidebar,
+    .rail {
+      background: var(--glass);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+    }
   }
 }
 
