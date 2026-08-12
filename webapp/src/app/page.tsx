@@ -538,9 +538,9 @@ export default function LandingPage() {
               objectFit: "cover",
               objectPosition: "50% 0%",
               WebkitMaskImage:
-                "linear-gradient(to bottom, black 0%, black 30%, transparent 94%)",
+                "linear-gradient(to bottom, black 0%, black 18%, transparent 46%)",
               maskImage:
-                "linear-gradient(to bottom, black 0%, black 30%, transparent 94%)",
+                "linear-gradient(to bottom, black 0%, black 18%, transparent 46%)",
             }}
           />
           <section
@@ -562,10 +562,8 @@ export default function LandingPage() {
               </Link>
             </div>
           </section>
-        </div>
-      </main>
 
-      <footer style={{ margin: 0, padding: 0 }}>
+      <footer style={{ position: "relative", margin: 0, padding: 0 }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
         <div style={{ height: 1, background: "var(--hairline)" }} />
         <div
@@ -594,12 +592,12 @@ export default function LandingPage() {
         </div>
         <div aria-hidden style={{ overflow: "hidden", marginTop: 48 }}>
           <div
+            className="wordmark-fill"
             style={{
               fontSize: "clamp(110px, 28vw, 400px)",
               fontWeight: 600,
               letterSpacing: "-0.03em",
               lineHeight: 1,
-              color: "var(--ink)",
               textAlign: "center",
               transform: "translateY(0.14em)",
               whiteSpace: "nowrap",
@@ -610,6 +608,8 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+        </div>
+      </main>
     </div>
   );
 }

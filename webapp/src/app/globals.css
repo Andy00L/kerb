@@ -1133,6 +1133,23 @@ input::placeholder {
   color: var(--on-paper);
 }
 
+/* Footer wordmark: the dusk sea lives inside the letterforms. Falls back to
+   plain ink where background-clip: text is unsupported. */
+.wordmark-fill {
+  color: var(--ink);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .wordmark-fill {
+    background-image: url("/landing/dusk.webp");
+    background-size: cover;
+    background-position: 50% 24%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
 .wsarrow {
   width: 48px;
   height: 48px;
