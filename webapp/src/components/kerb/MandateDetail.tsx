@@ -1015,14 +1015,8 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             />
             <div
               key={pane}
-              className="chartswap"
-              style={{
-                marginTop: 16,
-                background: "var(--card)",
-                borderRadius: 16,
-                padding: 8,
-                overflow: "hidden",
-              }}
+              className="card chartswap"
+              style={{ marginTop: 16, padding: 8, overflow: "hidden" }}
             >
               {pane === "pending" ? (
                 !executing || isLive ? (

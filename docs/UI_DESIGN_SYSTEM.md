@@ -50,7 +50,7 @@ Rules. `--up` and `--down` are reserved for money and market movement plus destr
 ## 3. Surfaces and radii
 
 - Page: flat `--bg`, no background gradients, no vignettes, no noise.
-- Card: `--card`, radius 16, no border by default; hairline only when two cards touch.
+- Card (raised plate, 2026-08-12): `--card`, radius 16, 1px `--hairline` border plus a lit top lip (`inset 0 1px 0 rgba(252,252,252,0.04)`), so every card separates from the charcoal. Wells and tab tracks are the inverse: recessed, with `inset 0 1px 2px` dark contact shadow. Raised vs recessed is the depth grammar.
 - Feature/paper card: `--paper` with `--on-paper` text and `--on-paper-2` icons, radius 20. Used sparingly: marketing/education cards, the single loudest surface per screen.
 - Well: `--well`, radius 12, inset (inputs, chart gutters, segmented tracks).
 - Controls: full pill (radius 999) for every button and segmented control.
