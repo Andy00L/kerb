@@ -14,6 +14,7 @@
   --ink-3: #8f8b88;
   --paper: #fcfcfc;
   --paper-warm: #f5f4f4;
+  --paper-press: #edebe9;
   --on-paper: #0d0d0d;
   --on-paper-2: #32302f;
   --up: #37bc65;
@@ -59,6 +60,7 @@ button {
 button:disabled {
   opacity: 0.4;
   cursor: default;
+  pointer-events: none;
 }
 
 input::placeholder {
@@ -86,6 +88,10 @@ input::placeholder {
 }
 
 /* == Buttons ============================================================== */
+/* Machined-key anatomy: a self-colored edge, an inner top highlight, one
+   tight downward shadow. Hover shifts the fill one tonal step, press one
+   more plus the 0.98 scale. Icons inside a button read one ink step softer
+   than the label. */
 
 .btn {
   display: inline-flex;
@@ -99,6 +105,7 @@ input::placeholder {
   white-space: nowrap;
   transition:
     background 120ms var(--ease),
+    box-shadow 120ms var(--ease),
     transform 100ms var(--ease);
 }
 
@@ -106,22 +113,44 @@ input::placeholder {
   transform: scale(0.98);
 }
 
+.btn svg {
+  color: var(--ink-2);
+}
+
 .btn-paper {
   background: var(--paper);
   color: var(--on-paper);
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(13, 13, 13, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.btn-paper svg {
+  color: var(--on-paper-2);
 }
 
 .btn-paper:hover {
-  background: #ffffff;
+  background: var(--paper-warm);
+}
+
+.btn-paper:active {
+  background: var(--paper-press);
 }
 
 .btn-quiet {
   background: var(--card);
   color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(252, 252, 252, 0.05),
+    0 0 0 1px var(--hairline);
 }
 
 .btn-quiet:hover {
   background: var(--card-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(252, 252, 252, 0.05),
+    0 0 0 1px var(--hairline-strong);
 }
 
 .btn-compact {
@@ -130,15 +159,26 @@ input::placeholder {
   font-size: 13px;
   background: var(--card);
   color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(252, 252, 252, 0.05),
+    0 0 0 1px var(--hairline);
 }
 
 .btn-compact:hover {
   background: var(--card-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(252, 252, 252, 0.05),
+    0 0 0 1px var(--hairline-strong);
 }
 
 .btn-danger {
   background: rgba(229, 84, 75, 0.1);
   color: var(--down);
+  box-shadow: 0 0 0 1px rgba(229, 84, 75, 0.22);
+}
+
+.btn-danger svg {
+  color: inherit;
 }
 
 .btn-danger:hover {
@@ -149,10 +189,23 @@ input::placeholder {
 .btn-seal {
   background: var(--on-paper);
   color: var(--paper);
+  box-shadow:
+    inset 0 1px 0 rgba(252, 252, 252, 0.16),
+    0 1px 2px rgba(13, 13, 13, 0.3);
+}
+
+.btn-seal svg {
+  color: var(--ink-2);
 }
 
 .btn-seal:hover {
   background: #000000;
+}
+
+/* The brand chip inverts on an ink fill so it never disappears. */
+.btn-seal .kchip {
+  background: var(--paper);
+  color: var(--on-paper);
 }
 
 .btn-icon {
@@ -169,9 +222,10 @@ input::placeholder {
     color 120ms var(--ease);
 }
 
+/* Translucent, so the hover reads on the page and inside cards alike. */
 .btn-icon:hover,
 .btn-icon[data-state="open"] {
-  background: var(--card);
+  background: rgba(252, 252, 252, 0.07);
   color: var(--ink);
 }
 
@@ -221,6 +275,7 @@ input::placeholder {
   border-radius: 999px;
   background: var(--card-hover);
   border: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 rgba(252, 252, 252, 0.05);
   transition:
     transform 250ms var(--ease),
     width 250ms var(--ease),
@@ -242,6 +297,10 @@ input::placeholder {
   align-items: center;
   justify-content: center;
   white-space: nowrap;
+}
+
+.tabs [role="tab"]:hover {
+  color: var(--ink);
 }
 
 .tabs [role="tab"][aria-selected="true"] {
@@ -386,9 +445,11 @@ input::placeholder {
   white-space: nowrap;
 }
 
+/* Status chips carry an honest self-colored border, never an inner bloom. */
 .chip-up {
   color: var(--up);
   background: rgba(55, 188, 101, 0.1);
+  border: 1px solid rgba(55, 188, 101, 0.22);
 }
 
 .chip-neutral {
@@ -612,7 +673,12 @@ input::placeholder {
   transition: border-color 150ms var(--ease);
 }
 
+.well:hover {
+  border-color: var(--hairline-strong);
+}
+
 .well:focus-within {
+  border-color: var(--hairline-strong);
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -822,6 +888,10 @@ input::placeholder {
     transform 100ms var(--ease);
 }
 
+.oa:active {
+  transform: scale(0.98);
+}
+
 .oa .plus {
   opacity: 0.7;
   display: inline-flex;
@@ -919,6 +989,7 @@ input::placeholder {
 
 .navitem:hover {
   color: var(--ink);
+  background: rgba(252, 252, 252, 0.05);
 }
 
 .navitem.active {
@@ -974,6 +1045,7 @@ input::placeholder {
 
 .railchip:hover {
   color: var(--ink);
+  background: rgba(252, 252, 252, 0.05);
 }
 
 .railchip[aria-current="true"],
@@ -1144,11 +1216,17 @@ input::placeholder {
   align-items: center;
   justify-content: center;
   flex: none;
-  transition: background 120ms var(--ease);
+  transition:
+    background 120ms var(--ease),
+    transform 100ms var(--ease);
 }
 
 .wsarrow:hover {
   background: rgba(13, 13, 13, 0.06);
+}
+
+.wsarrow:active {
+  transform: scale(0.96);
 }
 
 .hero-h {
