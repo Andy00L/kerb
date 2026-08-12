@@ -1120,6 +1120,36 @@ input::placeholder {
 
 /* == Landing-only helpers ================================================= */
 
+/* Light image sections: ink content over a pale sky, campaign style. */
+.onlight :is(button, a):focus-visible {
+  outline-color: rgba(13, 13, 13, 0.45);
+}
+
+.onlight .navlink {
+  color: var(--on-paper-2);
+}
+
+.onlight .navlink:hover {
+  color: var(--on-paper);
+}
+
+.wsarrow {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: 1.5px solid var(--on-paper);
+  color: var(--on-paper);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  transition: background 120ms var(--ease);
+}
+
+.wsarrow:hover {
+  background: rgba(13, 13, 13, 0.06);
+}
+
 .hero-h {
   font-size: 56px;
   font-weight: 500;
