@@ -340,7 +340,10 @@ export default function LandingPage() {
               </span>
             </div>
           </div>
-          <p className="cap" style={{ marginTop: 10, textAlign: "center" }}>
+          <p
+            className="cap"
+            style={{ marginTop: 10, textAlign: "center", color: "var(--ink-2)" }}
+          >
             Live preview against the FTSOv2 XRP/USD feed on Coston2; it falls
             back to a simulated walk when the RPC is unreachable.
           </p>
@@ -451,7 +454,7 @@ export default function LandingPage() {
             marginTop: 72,
             display: "flex",
             alignItems: "center",
-            background: "#eae5e0",
+            background: "#e6e1db",
           }}
         >
           <Image
@@ -459,7 +462,14 @@ export default function LandingPage() {
             alt="A lighthouse with an oxidized copper lantern on a headland above a calm sea"
             fill
             sizes="100vw"
-            style={{ objectFit: "cover", objectPosition: "80% 50%" }}
+            style={{
+              objectFit: "cover",
+              objectPosition: "80% 50%",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 0%, black 88%, transparent 100%)",
+              maskImage:
+                "linear-gradient(to bottom, black 0%, black 88%, transparent 100%)",
+            }}
           />
           <div
             style={{
@@ -512,22 +522,50 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section
-          className="rise"
-          style={{ animationDelay: "240ms", maxWidth: 560, margin: "72px auto 0", padding: "0 24px" }}
-          aria-label="Get started"
-        >
-          <div className="papercard" style={{ padding: 28, textAlign: "center" }}>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>Set your kerb.</div>
-            <p>Non-custodial. Proven by FDC. Sealed in a TEE.</p>
-            <Link className="btn btn-seal" href="/app" style={{ marginTop: 16 }}>
-              Open the app
-            </Link>
-          </div>
-        </section>
+        <div style={{ position: "relative", overflow: "hidden" }}>
+          {/* Second dusk pass: the lighthouse mist settles into the charcoal
+              floor before the footer wordmark. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/landing/dusk.webp"
+            alt=""
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "50% 0%",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 0%, black 30%, transparent 94%)",
+              maskImage:
+                "linear-gradient(to bottom, black 0%, black 30%, transparent 94%)",
+            }}
+          />
+          <section
+            className="rise"
+            style={{
+              animationDelay: "240ms",
+              position: "relative",
+              maxWidth: 560,
+              margin: "0 auto",
+              padding: "96px 24px 120px",
+            }}
+            aria-label="Get started"
+          >
+            <div className="papercard" style={{ padding: 28, textAlign: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>Set your kerb.</div>
+              <p>Non-custodial. Proven by FDC. Sealed in a TEE.</p>
+              <Link className="btn btn-seal" href="/app" style={{ marginTop: 16 }}>
+                Open the app
+              </Link>
+            </div>
+          </section>
+        </div>
       </main>
 
-      <footer style={{ margin: "64px auto 0", padding: 0 }}>
+      <footer style={{ margin: 0, padding: 0 }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px" }}>
         <div style={{ height: 1, background: "var(--hairline)" }} />
         <div
@@ -539,7 +577,7 @@ export default function LandingPage() {
             href="https://dev.flare.network"
             target="_blank"
             rel="noreferrer"
-            style={{ color: "var(--ink-3)" }}
+            style={{ color: "var(--ink-2)" }}
           >
             Flare docs
           </a>
@@ -547,7 +585,7 @@ export default function LandingPage() {
             href="https://testnet.xrpl.org"
             target="_blank"
             rel="noreferrer"
-            style={{ color: "var(--ink-3)" }}
+            style={{ color: "var(--ink-2)" }}
           >
             XRPL testnet explorer
           </a>
