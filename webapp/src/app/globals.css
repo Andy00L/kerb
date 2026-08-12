@@ -883,13 +883,6 @@ input::placeholder {
   font-weight: 600;
   font-size: 13px;
   color: var(--ink);
-  transition:
-    background 120ms var(--ease),
-    transform 100ms var(--ease);
-}
-
-.oa:active {
-  transform: scale(0.98);
 }
 
 .oa .plus {
@@ -897,6 +890,7 @@ input::placeholder {
   display: inline-flex;
 }
 
+/* Data pills, not controls: no hover or press states, nothing to answer. */
 .oa-neutral {
   background: var(--well);
   border: 1px solid var(--hairline);
@@ -906,16 +900,8 @@ input::placeholder {
   background: rgba(229, 84, 75, 0.08);
 }
 
-.oa-sell:hover {
-  background: rgba(229, 84, 75, 0.16);
-}
-
 .oa-buy {
   background: rgba(55, 188, 101, 0.08);
-}
-
-.oa-buy:hover {
-  background: rgba(55, 188, 101, 0.16);
 }
 
 /* == Cards with overlay links, nav, rails ================================= */

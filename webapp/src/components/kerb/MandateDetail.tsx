@@ -319,14 +319,25 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
         className={`rail rise${railOpen ? " open" : ""}`}
         aria-label="Your mandates"
       >
-        <button
-          type="button"
-          className="btn-icon"
-          aria-label="Toggle mandate rail"
-          onClick={() => setRailOpen((open) => !open)}
+        <Link
+          href="/app"
+          aria-label="Kerb dashboard"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            background: "var(--paper)",
+            color: "var(--on-paper)",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 16,
+            fontWeight: 600,
+            flex: "none",
+          }}
         >
-          <IconRail />
-        </button>
+          K
+        </Link>
         <div style={{ width: 24, height: 1, background: "var(--hairline)", margin: "2px 0" }} />
         {DEMO_MANDATES.map((entry) => (
           <Link
@@ -599,9 +610,10 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
             <div style={{ marginTop: 16, position: "relative" }}>
               <HalftoneChart
                 series={series}
-                swapKey={`${range}:${interval}`}
+                swapKey={`${range}:${interval}:${chartStyle}`}
                 className="chartsvg"
                 heightPx={tallChart ? 400 : 248}
+                variant={chartStyle}
                 hoverLabels={hoverLabels}
                 onHoverPoint={setHoverIndex}
               />
