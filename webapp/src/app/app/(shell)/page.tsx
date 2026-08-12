@@ -218,26 +218,67 @@ export default function DashboardPage() {
 
       {!connected ? (
         <div
-          className="card rise"
-          style={{ marginTop: 40, textAlign: "center", padding: 40 }}
+          className="rise"
+          style={{
+            position: "relative",
+            marginTop: 24,
+            minHeight: "calc(100vh - 210px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
         >
-          <div style={{ fontSize: 15, fontWeight: 600 }}>
-            Connect a wallet to see your mandates
-          </div>
-          <p className="cap" style={{ marginTop: 4 }}>
-            Installed wallets are detected; the demo identity walks every flow
-            on sample data.
-          </p>
-          <button
-            type="button"
-            className="btn btn-paper"
-            style={{ marginTop: 16 }}
-            onClick={() => {
-              void connect();
+          {/* Night quay scene; its own pixels feather into the page charcoal
+              so the image has no seam against --bg. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/app/quay.webp"
+            alt=""
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "74% 62%",
+              maskImage:
+                "linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%), linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, transparent 0%, black 14%, black 84%, transparent 100%), linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+              maskComposite: "intersect",
+              WebkitMaskComposite: "source-in",
+            }}
+          />
+          <div
+            className="card"
+            style={{
+              position: "relative",
+              textAlign: "center",
+              padding: 40,
+              width: "100%",
+              maxWidth: 440,
             }}
           >
-            <span className="kchip">K</span>Connect wallet
-          </button>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>
+              Connect a wallet to see your mandates
+            </div>
+            <p className="cap" style={{ marginTop: 4 }}>
+              Installed wallets are detected; the demo identity walks every flow
+              on sample data.
+            </p>
+            <button
+              type="button"
+              className="btn btn-paper"
+              style={{ marginTop: 16 }}
+              onClick={() => {
+                void connect();
+              }}
+            >
+              <span className="kchip">K</span>Connect wallet
+            </button>
+          </div>
         </div>
       ) : (
         <>
