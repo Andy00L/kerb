@@ -234,7 +234,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <main>
+      <main className="photoback">
         <div style={{ position: "relative" }}>
           {/* Dusk plate: carries the hero's pale mist down into the charcoal
               page; its own pixels fade out long before the section ends. */}
@@ -339,14 +339,13 @@ export default function LandingPage() {
                 <span className="chip chip-up">armed</span>
               </span>
             </div>
+            {/* Inside the card: over the mist plate this line has no readable
+                ground of its own. */}
+            <p className="cap" style={{ marginTop: 12, textAlign: "center" }}>
+              Live preview against the FTSOv2 XRP/USD feed on Coston2; it falls
+              back to a simulated walk when the RPC is unreachable.
+            </p>
           </div>
-          <p
-            className="cap"
-            style={{ marginTop: 10, textAlign: "center", color: "var(--ink-2)" }}
-          >
-            Live preview against the FTSOv2 XRP/USD feed on Coston2; it falls
-            back to a simulated walk when the RPC is unreachable.
-          </p>
         </section>
 
         <section
