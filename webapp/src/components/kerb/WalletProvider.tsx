@@ -19,13 +19,55 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { COSTON2_CHAIN_ID } from "@/lib/config";
+import { COSTON2_CHAIN_ID, COSTON2_CHAIN_PARAMS } from "@/lib/config";
 import { DEMO_WALLET } from "@/lib/demo";
 import {
   discoverWallets,
   type DetectedWallet,
   type Eip1193Provider,
 } from "@/lib/wallets";
+
+/** EIP-1193 error code for "this chain has not been added to the wallet". */
+const UNRECOGNIZED_CHAIN = 4902;
+
+function errorCode(candidate: unknown): number | null {
+  if (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    "code" in candidate &&
+    typeof (candidate as { code: unknown }).code === "number"
+  ) {
+    return (candidate as { code: number }).code;
+  }
+  return null;
+}
+
+/**
+ * Land the wallet on Coston2: switch when the wallet knows the chain, add it
+ * first (EIP-3085, which also switches) when it does not. A user rejection
+ * is respected, not retried.
+ */
+async function ensureCoston2(provider: Eip1193Provider): Promise<void> {
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: `0x${COSTON2_CHAIN_ID.toString(16)}` }],
+    });
+  } catch (switchError) {
+    if (errorCode(switchError) !== UNRECOGNIZED_CHAIN) {
+      console.log(`[ensureCoston2] chain switch declined: ${switchError}`);
+      return;
+    }
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [COSTON2_CHAIN_PARAMS],
+      });
+    } catch (addError) {
+      console.log(`[ensureCoston2] chain add declined: ${addError}`);
+    }
+  }
+}
 
 export interface WalletState {
   readonly address: string | null;
@@ -82,14 +124,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setConnectedRdns(wallet.rdns);
         setPickerOpen(false);
         // Best effort: land the wallet on Coston2. A rejection is not fatal.
-        try {
-          await wallet.provider.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: `0x${COSTON2_CHAIN_ID.toString(16)}` }],
-          });
-        } catch (switchError) {
-          console.log(`[connectWith] chain switch declined: ${switchError}`);
-        }
+        await ensureCoston2(wallet.provider);
       } catch (connectError) {
         console.log(`[connectWith] connection declined: ${connectError}`);
       }

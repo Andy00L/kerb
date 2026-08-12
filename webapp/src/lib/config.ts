@@ -19,6 +19,19 @@ export interface AppConfig {
 export const COSTON2_CHAIN_ID = 114;
 
 /**
+ * EIP-3085 wallet_addEthereumChain parameters for Coston2, used when a
+ * wallet does not know the chain yet (sourceRef: dev.flare.network network
+ * reference).
+ */
+export const COSTON2_CHAIN_PARAMS = {
+  chainId: `0x${COSTON2_CHAIN_ID.toString(16)}`,
+  chainName: "Flare Testnet Coston2",
+  nativeCurrency: { name: "Coston2 Flare", symbol: "C2FLR", decimals: 18 },
+  rpcUrls: ["https://coston2-api.flare.network/ext/C/rpc"],
+  blockExplorerUrls: ["https://coston2-explorer.flare.network"],
+} as const;
+
+/**
  * Read the public configuration.
  *
  * Without a deployed contract the app runs in demo mode: every screen works
