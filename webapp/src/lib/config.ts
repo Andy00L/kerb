@@ -8,6 +8,11 @@ export interface AppConfig {
   readonly proxyUrl: string | null;
   /** True when the app can talk to a deployed contract. */
   readonly isLive: boolean;
+  /**
+   * True when the demo key is set at build time: the demo identity and every
+   * sample-data surface show. Without the key the site is production only.
+   */
+  readonly isDemoEnabled: boolean;
 }
 
 /** Coston2 chain id (sourceRef: dev.flare.network network reference). */
@@ -33,5 +38,6 @@ export function readAppConfig(): AppConfig {
     contractAddress,
     proxyUrl,
     isLive: contractAddress !== null,
+    isDemoEnabled: (process.env.NEXT_PUBLIC_KERB_DEMO_KEY ?? "") !== "",
   };
 }

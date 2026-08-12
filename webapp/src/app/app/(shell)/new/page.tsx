@@ -180,7 +180,7 @@ export default function CreateMandatePage() {
   const [copied, setCopied] = useState(false);
   const [submitFailure, setSubmitFailure] = useState<string | null>(null);
   const [createdMandateId, setCreatedMandateId] = useState(DEMO_CREATED_MANDATE_ID);
-  const isLive = readAppConfig().isLive;
+  const { isLive, isDemoEnabled } = readAppConfig();
 
   // Synchronizes the default expiry with the wall clock, once.
   useEffect(() => {
@@ -665,6 +665,11 @@ export default function CreateMandatePage() {
                 // Live mode only ever shows the address read from the chain:
                 // funding anything else would miss the FDC deposit proof.
                 <LiveDeposit mandateId={createdMandateId} />
+              ) : !isDemoEnabled ? (
+                <p className="cap" style={{ fontSize: 13 }}>
+                  The enclave-derived address appears once provisioning is
+                  relayed on-chain. Do not send funds before it does.
+                </p>
               ) : (
                 <>
                   <div className="well" style={{ height: "auto", padding: "10px 14px", gap: 12 }}>

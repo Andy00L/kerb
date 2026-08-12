@@ -147,8 +147,10 @@ function factRow(
 }
 
 export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
-  const isLive = readAppConfig().isLive;
+  const { isLive, isDemoEnabled } = readAppConfig();
   const onChain = useOnChainMandate(isLive ? mandateId : null);
+  // Sample data renders only on demo builds that are not chain-backed.
+  const showDemoData = isDemoEnabled && !isLive;
   const { address, provider } = useWallet();
   const mandate = findDemoMandate(mandateId) ?? findDemoMandate(6);
   const [cancelled, setCancelled] = useState(false);
@@ -195,13 +197,13 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
   const settled = status === "Settled";
   const filledCents = isLive
     ? (onChain?.filledDrops ?? 0n) / DROPS_PER_XRP_CENT
-    : awaitingDeposit
+    : awaitingDeposit || !isDemoEnabled
       ? 0n
       : (mandate?.filledCents ?? 0n);
   const totalCents = mandate?.totalCents ?? 250_000n;
-  const timeline = isLive
-    ? buildLiveTimeline(baseStatus)
-    : buildDemoTimeline(executing || dimmed);
+  const timeline = showDemoData
+    ? buildDemoTimeline(executing || dimmed)
+    : buildLiveTimeline(baseStatus);
 
   // Live mode shows only the enclave-derived address read from the contract;
   // the FDC deposit proof is bound to it, so nothing else may be funded.
@@ -209,7 +211,9 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
     ? onChain !== null && onChain.depositAddress !== ""
       ? onChain.depositAddress
       : null
-    : DEMO_DEPOSIT_ADDRESS;
+    : isDemoEnabled
+      ? DEMO_DEPOSIT_ADDRESS
+      : null;
 
   const priceFloat = Number(price.priceMicro) / 1_000_000;
   const series = useMemo(
@@ -339,7 +343,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
           K
         </Link>
         <div style={{ width: 24, height: 1, background: "var(--hairline)", margin: "2px 0" }} />
-        {DEMO_MANDATES.map((entry) => (
+        {(isDemoEnabled ? DEMO_MANDATES : []).map((entry) => (
           <Link
             key={entry.id}
             className="railchip num"
@@ -359,7 +363,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
 
       <main style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
         <div style={{ width: "100%", maxWidth: 1100, padding: "24px 24px 80px" }}>
-          {hintOpen ? (
+          {hintOpen && isDemoEnabled ? (
             <div
               className="card rise"
               style={{
@@ -698,7 +702,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                     onPick={setExpiry}
                   />
                 </div>
-                {isLive ? (
+                {!showDemoData ? (
                   <p className="cap" style={{ padding: "4px 12px 8px", fontSize: 13 }}>
                     Slice sizes stay sealed in live mode. Per-slice fills live
                     on XRPL: open the deposit account on the testnet explorer
@@ -1019,7 +1023,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
               style={{ marginTop: 16, padding: 8, overflow: "hidden" }}
             >
               {pane === "pending" ? (
-                !executing || isLive ? (
+                !executing || !showDemoData ? (
                   <div className="brow">
                     <span className="cap" style={{ fontSize: 13 }}>
                       {isLive
@@ -1053,7 +1057,7 @@ export function MandateDetail({ mandateId }: { readonly mandateId: number }) {
                 )
               ) : null}
               {pane === "fills" ? (
-                isLive ? (
+                !showDemoData ? (
                   <div className="brow">
                     <span className="cap" style={{ fontSize: 13 }}>
                       Per-slice fills live on XRPL: open the deposit account on

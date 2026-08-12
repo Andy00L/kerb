@@ -54,6 +54,14 @@ function isSafeIcon(candidate: unknown): candidate is string {
 }
 
 /**
+ * Bundled official marks for wallets whose EIP-6963 announcement carries a
+ * missing or untrusted icon, keyed by rdns.
+ */
+const KNOWN_WALLET_ICONS: Readonly<Record<string, string>> = {
+  "app.phantom": "/wallets/phantom.png",
+};
+
+/**
  * Enumerate the wallets installed in this browser.
  *
  * EIP-6963 wallets announce synchronously during the request dispatch, so
@@ -83,7 +91,9 @@ export function discoverWallets(): DetectedWallet[] {
     found.push({
       rdns: info.rdns,
       name: info.name,
-      icon: isSafeIcon(info.icon) ? info.icon : null,
+      icon: isSafeIcon(info.icon)
+        ? info.icon
+        : (KNOWN_WALLET_ICONS[info.rdns] ?? null),
       provider,
     });
   };

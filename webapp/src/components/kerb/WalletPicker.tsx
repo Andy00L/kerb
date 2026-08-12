@@ -12,6 +12,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useWallet } from "@/components/kerb/WalletProvider";
+import { readAppConfig } from "@/lib/config";
 import { WALLET_PROPOSALS } from "@/lib/wallets";
 import { truncateMiddle } from "@/lib/format";
 import { IconClose, IconOpen } from "@/components/kerb/ui/icons";
@@ -28,6 +29,7 @@ export function WalletPicker() {
     disconnect,
     closePicker,
   } = useWallet();
+  const isDemoEnabled = readAppConfig().isDemoEnabled;
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Synchronizes with document-level key events, a system React does not
@@ -117,8 +119,9 @@ export function WalletPicker() {
           </button>
         </div>
         <p className="cap" style={{ padding: "0 12px 10px" }}>
-          Pick an installed wallet, or use the demo identity to walk every
-          flow on sample data.
+          {isDemoEnabled
+            ? "Pick an installed wallet, or use the demo identity to walk every flow on sample data."
+            : "Pick an installed wallet."}
         </p>
         {wallets.length > 0 ? (
           wallets.map((wallet) => (
@@ -198,27 +201,31 @@ export function WalletPicker() {
             ))}
           </>
         )}
-        <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
-        <button
-          type="button"
-          role="menuitem"
-          className="mitem"
-          style={{ height: "auto", padding: "10px 12px" }}
-          onClick={connectDemo}
-        >
-          <span style={{ textAlign: "left" }}>
-            <span style={{ fontSize: 14, color: "var(--ink)" }}>
-              Demo identity
-              {isDemo ? (
-                <span className="chip chip-up" style={{ marginLeft: 8 }}>
-                  connected
+        {isDemoEnabled ? (
+          <>
+            <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />
+            <button
+              type="button"
+              role="menuitem"
+              className="mitem"
+              style={{ height: "auto", padding: "10px 12px" }}
+              onClick={connectDemo}
+            >
+              <span style={{ textAlign: "left" }}>
+                <span style={{ fontSize: 14, color: "var(--ink)" }}>
+                  Demo identity
+                  {isDemo ? (
+                    <span className="chip chip-up" style={{ marginLeft: 8 }}>
+                      connected
+                    </span>
+                  ) : null}
                 </span>
-              ) : null}
-            </span>
-            <br />
-            <span className="cap">walk every flow on sample data</span>
-          </span>
-        </button>
+                <br />
+                <span className="cap">walk every flow on sample data</span>
+              </span>
+            </button>
+          </>
+        ) : null}
         {address !== null ? (
           <>
             <div style={{ height: 1, background: "var(--hairline)", margin: "6px 4px" }} />

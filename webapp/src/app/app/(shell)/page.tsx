@@ -21,6 +21,7 @@ import {
 } from "@/components/kerb/ui/icons";
 import { useWallet } from "@/components/kerb/WalletProvider";
 import { buildRangeSeries } from "@/lib/chartSeries";
+import { readAppConfig } from "@/lib/config";
 import {
   DEMO_MANDATES,
   type DemoMandate,
@@ -133,8 +134,10 @@ export default function DashboardPage() {
     );
   }, []);
 
+  const isDemoEnabled = readAppConfig().isDemoEnabled;
   const connected = address !== null;
-  const rows = DEMO_MANDATES.map((mandate) =>
+  // Without the demo key the dashboard carries no sample data at all.
+  const rows = (isDemoEnabled ? DEMO_MANDATES : []).map((mandate) =>
     cancelledIds.has(mandate.id)
       ? { ...mandate, status: "Cancelled" as const, cancellable: false }
       : mandate,
@@ -207,7 +210,7 @@ export default function DashboardPage() {
               onPick={() => router.push("/app/new")}
             />
           ) : null}
-          {connected ? (
+          {connected && isDemoEnabled ? (
             <Link href="/app/m/7" className="btn btn-quiet hact">
               Deposit
             </Link>
@@ -269,8 +272,9 @@ export default function DashboardPage() {
               Connect a wallet to see your mandates
             </div>
             <p className="cap" style={{ marginTop: 4 }}>
-              Installed wallets are detected; the demo identity walks every flow
-              on sample data.
+              {isDemoEnabled
+                ? "Installed wallets are detected; the demo identity walks every flow on sample data."
+                : "Installed wallets are detected."}
             </p>
             <button
               type="button"
@@ -327,23 +331,39 @@ export default function DashboardPage() {
                 {formatXrpCents(protectedCents)} XRP, {percentText} in the last day
               </span>
             </div>
-            <Link
-              href="/app/m/6"
-              className="alink num"
-              style={{ marginTop: 6, fontSize: 14, fontWeight: 600, color: deltaColor }}
-            >
-              <Ticker
-                value={`${deltaSign}${formatXrpCents(deltaCents)}`}
-                masked={masked}
-              />
-              <Ticker value={percentText} />
-              <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 12.5 }}>
-                in the last day
+            {isDemoEnabled ? (
+              <Link
+                href="/app/m/6"
+                className="alink num"
+                style={{ marginTop: 6, fontSize: 14, fontWeight: 600, color: deltaColor }}
+              >
+                <Ticker
+                  value={`${deltaSign}${formatXrpCents(deltaCents)}`}
+                  masked={masked}
+                />
+                <Ticker value={percentText} />
+                <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 12.5 }}>
+                  in the last day
+                </span>
+                <span className="arr" aria-hidden>
+                  <IconArrowRight />
+                </span>
+              </Link>
+            ) : (
+              <span
+                className="alink num"
+                style={{ marginTop: 6, fontSize: 14, fontWeight: 600, color: deltaColor }}
+              >
+                <Ticker
+                  value={`${deltaSign}${formatXrpCents(deltaCents)}`}
+                  masked={masked}
+                />
+                <Ticker value={percentText} />
+                <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 12.5 }}>
+                  in the last day
+                </span>
               </span>
-              <span className="arr" aria-hidden>
-                <IconArrowRight />
-              </span>
-            </Link>
+            )}
           </section>
 
           <section
@@ -379,6 +399,8 @@ export default function DashboardPage() {
             </div>
           </section>
 
+          {/* The insight cards carry sample numbers; demo builds only. */}
+          {isDemoEnabled ? (
           <div
             className="insights rise"
             style={{
@@ -476,6 +498,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          ) : null}
 
           <section className="rise" style={{ animationDelay: "150ms", marginTop: 48 }} aria-label="Mandates">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
@@ -818,6 +841,8 @@ export default function DashboardPage() {
             </section>
           ) : null}
 
+          {/* Sample expiry cards; demo builds only. */}
+          {isDemoEnabled ? (
           <section
             className="rise"
             style={{ animationDelay: "240ms", marginTop: 48 }}
@@ -898,6 +923,7 @@ export default function DashboardPage() {
               ))}
             </div>
           </section>
+          ) : null}
         </>
       )}
     </div>
