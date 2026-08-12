@@ -586,6 +586,73 @@ input::placeholder {
   }
 }
 
+/* Calendar panel (react-day-picker inside a .menu panel), on the tokens. */
+.datecal {
+  padding: 12px;
+}
+
+.datecal .rdp-root {
+  --rdp-accent-color: var(--paper);
+  --rdp-accent-background-color: rgba(252, 252, 252, 0.12);
+  --rdp-today-color: var(--up);
+  --rdp-day-width: 34px;
+  --rdp-day-height: 34px;
+  --rdp-day_button-width: 32px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-border-radius: 999px;
+  --rdp-day_button-border: 1px solid transparent;
+  --rdp-selected-border: 1px solid transparent;
+  --rdp-outside-opacity: 0.35;
+  --rdp-nav_button-width: 32px;
+  --rdp-nav_button-height: 32px;
+  --rdp-nav-height: 36px;
+  --rdp-weekday-opacity: 1;
+  font-size: 13px;
+}
+
+.datecal .rdp-caption_label {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.datecal .rdp-weekday {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.datecal .rdp-day_button {
+  font-variant-numeric: tabular-nums;
+  transition:
+    background 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+.datecal .rdp-day_button:hover {
+  background: var(--card-hover);
+}
+
+.datecal .rdp-selected .rdp-day_button {
+  background: var(--paper);
+  color: var(--on-paper);
+  font-weight: 600;
+}
+
+.datecal .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: var(--up);
+  font-weight: 600;
+}
+
+.datecal .rdp-button_previous:hover,
+.datecal .rdp-button_next:hover {
+  background: var(--card-hover);
+  border-radius: 999px;
+}
+
+.datecal .rdp-chevron {
+  fill: var(--ink-2);
+}
+
 .mitem {
   display: flex;
   align-items: center;

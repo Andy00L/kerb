@@ -259,6 +259,10 @@ export default function DashboardPage() {
               padding: 40,
               width: "100%",
               maxWidth: 440,
+              // Opaque on purpose: this card floats on the quay photograph,
+              // and the translucent card veil would let the image bleed
+              // through the copy.
+              background: "#1a1918",
             }}
           >
             <div style={{ fontSize: 15, fontWeight: 600 }}>

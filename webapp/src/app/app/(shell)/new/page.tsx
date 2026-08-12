@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { WalletCluster } from "@/components/kerb/AppShell";
 import { LiveDeposit } from "@/components/kerb/LiveDeposit";
+import { DatePicker } from "@/components/kerb/ui/DatePicker";
 import { ProofSeal } from "@/components/kerb/ProofSeal";
 import { Fold } from "@/components/kerb/ui/Fold";
 import { Menu } from "@/components/kerb/ui/Menu";
@@ -542,16 +543,13 @@ export default function CreateMandatePage() {
 
               <section className="rise" style={{ animationDelay: "180ms" }}>
                 <div className="seclabel">Expiry</div>
-                <div className={`well${errors.expiry ? " err" : ""}`}>
-                  <input
-                    type="datetime-local"
-                    aria-label="Expiry"
-                    style={{ colorScheme: "dark", fontSize: 13 }}
-                    value={values.expiry}
-                    onChange={(event) => setField("expiry", event.target.value)}
-                    onBlur={() => blurField("expiry")}
-                  />
-                </div>
+                <DatePicker
+                  value={values.expiry}
+                  ariaLabel="Expiry"
+                  hasError={errors.expiry !== undefined}
+                  onChange={(next) => setField("expiry", next)}
+                  onClose={() => blurField("expiry")}
+                />
                 <p className={`cap${errors.expiry ? " err" : ""}`} style={{ marginTop: 8 }}>
                   {errors.expiry ?? "Maximum 30 days per mandate; longer plans roll."}
                 </p>
