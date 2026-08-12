@@ -13,7 +13,7 @@
 import type { Payment, Wallet } from 'xrpl';
 import { TRIGGER_CONFIRMATIONS } from './config.js';
 import { isExecutable, MandateStatus, type MandateStatusSource } from './chain.js';
-import { TriggerMonitor, type PriceFeedSource } from './ftso.js';
+import { TriggerMonitor, XRP_USD_FEED_ID, type PriceFeedSource } from './ftso.js';
 import type { ValidatedMandate } from './mandate.js';
 import {
   buildIouSettlementPayment,
@@ -146,15 +146,18 @@ export class MandateEngine {
         }
         const reading = await this.readPrice();
         if (reading !== null && monitor.observe(reading) && this.isSliceDue()) {
-          monitor.reset();
-          const sliceFilled = await this.executeSlice(reading);
-          if (sliceFilled) {
-            this.recordSliceFilled();
-          }
+          const executionPrice = await this.readExecutionPrice(reading);
+          if (executionPrice !== null) {
+            monitor.reset();
+            const sliceFilled = await this.executeSlice(executionPrice);
+            if (sliceFilled) {
+              this.recordSliceFilled();
+            }
 
-          if (this.isMandateComplete()) {
-            console.log(`[MandateEngine] mandate ${mandateId} filled`);
-            return 'filled';
+            if (this.isMandateComplete()) {
+              console.log(`[MandateEngine] mandate ${mandateId} filled`);
+              return 'filled';
+            }
           }
         }
       }
@@ -321,6 +324,28 @@ export class MandateEngine {
       return reading.priceScaled;
     } catch (readError) {
       console.log(`[MandateEngine] feed read failed: ${readError}`);
+      return null;
+    }
+  }
+
+  /**
+   * Price for the XRPL leg of a slice.
+   *
+   * Execution is always XRP against the counter currency, so a mandate
+   * triggered by another feed (BTC/USD arming an XRP exit, for example) still
+   * prices its offers from XRP/USD. When the trigger feed is XRP/USD the
+   * confirmed reading is reused, keeping a single read per slice. A failed
+   * read skips the slice; the trigger re-confirms on later observations.
+   */
+  private async readExecutionPrice(triggerPriceScaled: bigint): Promise<bigint | null> {
+    if (this.context.mandate.feedId === XRP_USD_FEED_ID) {
+      return triggerPriceScaled;
+    }
+    try {
+      const reading = await this.dependencies.ftsoReader.readFeed(XRP_USD_FEED_ID);
+      return reading.priceScaled;
+    } catch (readError) {
+      console.log(`[MandateEngine] execution feed read failed: ${readError}`);
       return null;
     }
   }

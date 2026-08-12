@@ -16,13 +16,11 @@ import {
   encryptToEnclave,
   type TeePublicKeyCoordinates,
 } from "./ecies";
+import { feedIdForPair, type SupportedPair } from "./feeds";
 import type { Eip1193Provider } from "./wallets";
 
-/** XRP/USD block-latency feed id, the one pair this build supports. */
-export const XRP_USD_FEED_ID =
-  "0x015852502f55534400000000000000000000000000";
-
 export interface MandateDraft {
+  readonly pair: SupportedPair;
   readonly side: "buy" | "sell";
   readonly kind: "stop" | "limit" | "dca";
   readonly triggerOperator: "lte" | "gte";
@@ -84,11 +82,11 @@ export const INSTRUCTION_FEE_WEI = 1_000_000_000_000n;
 export function buildMandateDocument(draft: MandateDraft): string {
   const document: Record<string, unknown> = {
     v: 1,
-    pair: "XRP/USD",
+    pair: draft.pair,
     side: draft.side,
     kind: draft.kind,
     trigger: {
-      feedId: XRP_USD_FEED_ID,
+      feedId: feedIdForPair(draft.pair),
       op: draft.triggerOperator,
       price: draft.triggerPrice,
     },
@@ -140,6 +138,28 @@ async function fetchTeePublicKey(proxyUrl: string): Promise<Uint8Array | null> {
   }
 }
 
+/**
+ * Parse the configured fallback key: an uncompressed secp256k1 point,
+ * 0x04 || X || Y as hex. Returns null when unset or malformed.
+ */
+function parseConfiguredTeeKey(keyHex: string | null): Uint8Array | null {
+  if (keyHex === null) {
+    return null;
+  }
+  const body = keyHex.startsWith("0x") ? keyHex.slice(2) : keyHex;
+  if (body.length !== 130 || !body.startsWith("04")) {
+    return null;
+  }
+  try {
+    return buildUncompressedPublicKey({
+      x: `0x${body.slice(2, 66)}`,
+      y: `0x${body.slice(66)}`,
+    });
+  } catch {
+    return null;
+  }
+}
+
 function toHexBytes(data: Uint8Array): `0x${string}` {
   let hex = "0x";
   for (const byte of data) {
@@ -171,9 +191,17 @@ export async function submitMandate(
     return { ok: true, transactionHash: `DEMO${Date.now().toString(16)}` };
   }
 
-  const teePublicKey = await fetchTeePublicKey(config.proxyUrl);
+  // The /info endpoint is authoritative; the configured key covers a dead
+  // tunnel or a CORS-blocked proxy, since the key is stable per enclave.
+  const teePublicKey =
+    (await fetchTeePublicKey(config.proxyUrl)) ??
+    parseConfiguredTeeKey(config.teePublicKeyHex);
   if (teePublicKey === null) {
-    return { ok: false, reason: "the enclave public key is unreachable" };
+    return {
+      ok: false,
+      reason:
+        "the enclave key is unreachable; bring the ext-proxy up or set NEXT_PUBLIC_TEE_PUBKEY",
+    };
   }
 
   const plaintext = new TextEncoder().encode(buildMandateDocument(draft));

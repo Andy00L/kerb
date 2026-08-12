@@ -6,6 +6,12 @@ export interface AppConfig {
   readonly contractAddress: `0x${string}` | null;
   /** Public URL of the ext-proxy, null until the tunnel exists. */
   readonly proxyUrl: string | null;
+  /**
+   * Uncompressed TEE encryption key (0x04 || X || Y, 65 bytes hex), used to
+   * seal mandates when the proxy /info endpoint is unreachable. Null when
+   * unset; the key is public material, safe in a NEXT_PUBLIC variable.
+   */
+  readonly teePublicKeyHex: string | null;
   /** True when the app can talk to a deployed contract. */
   readonly isLive: boolean;
   /**
@@ -46,10 +52,12 @@ export function readAppConfig(): AppConfig {
     (process.env.NEXT_PUBLIC_INSTRUCTION_SENDER as `0x${string}` | undefined) ??
     null;
   const proxyUrl = process.env.NEXT_PUBLIC_EXT_PROXY_URL ?? null;
+  const teePublicKeyHex = process.env.NEXT_PUBLIC_TEE_PUBKEY ?? null;
   return {
     chainUrl,
     contractAddress,
     proxyUrl,
+    teePublicKeyHex,
     isLive: contractAddress !== null,
     isDemoEnabled: (process.env.NEXT_PUBLIC_KERB_DEMO_KEY ?? "") !== "",
   };

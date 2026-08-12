@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Wallet } from 'xrpl';
 import {
   decodeMandate,
+  feedIdForPair,
   PRICE_SCALE,
   parseXrpAmountToDrops,
   validateMandate,
@@ -115,6 +116,30 @@ describe('validateMandate', () => {
     const document = buildValidMandate();
     document.trigger = { feedId: '0x0158', op: 'lte', price: '2.85' };
     expect(validateMandate(document, NOW_UNIX_SECONDS).ok).toBe(false);
+  });
+
+  it('rejects a feed id that does not match the pair', () => {
+    const document = buildValidMandate();
+    document.pair = 'BTC/USD';
+    const result = validateMandate(document, NOW_UNIX_SECONDS);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('does not match mandate.pair');
+  });
+
+  it('accepts a non-XRP trigger pair with its own feed id', () => {
+    const document = buildValidMandate();
+    document.pair = 'BTC/USD';
+    document.trigger = {
+      feedId: feedIdForPair('BTC/USD'),
+      op: 'gte',
+      price: '105000',
+    };
+    const result = validateMandate(document, NOW_UNIX_SECONDS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.pair).toBe('BTC/USD');
+    expect(result.value.feedId).toBe('0x014254432f55534400000000000000000000000000');
   });
 
   it('reports distinct reasons for malformed JSON and a schema failure', () => {

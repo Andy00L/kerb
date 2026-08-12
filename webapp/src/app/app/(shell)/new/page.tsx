@@ -14,6 +14,7 @@ import { useWallet } from "@/components/kerb/WalletProvider";
 import { waitForMandateId } from "@/lib/chain";
 import { readAppConfig } from "@/lib/config";
 import { DEMO_DEPOSIT_ADDRESS } from "@/lib/demo";
+import { feedIdForPair, SUPPORTED_PAIRS, type SupportedPair } from "@/lib/feeds";
 import { formatPriceMicro } from "@/lib/format";
 import {
   submitMandate,
@@ -29,6 +30,7 @@ type Phase = "form" | "review" | "done";
 type ButtonStep = "seal" | "wallet" | "submitting" | "error";
 
 interface FormValues {
+  pair: SupportedPair;
   side: "sell" | "buy";
   kind: "stop" | "limit" | "dca";
   op: "lte" | "gte";
@@ -46,6 +48,7 @@ interface FormValues {
 type FieldErrors = Partial<Record<keyof FormValues, string>>;
 
 const INITIAL_VALUES: FormValues = {
+  pair: "XRP/USD",
   side: "sell",
   kind: "stop",
   op: "lte",
@@ -141,7 +144,7 @@ function buildReviewRows(values: FormValues): Array<[string, string]> {
   const operatorWord =
     values.op === "lte" ? "falls to or below" : "rises to or above";
   const rows: Array<[string, string]> = [
-    ["Pair", "XRP/USD"],
+    ["Pair", values.pair],
     ["Side", values.side === "sell" ? "Sell" : "Buy"],
     ["Kind", { stop: "Stop", limit: "Limit", dca: "DCA" }[values.kind]],
     ["Trigger", `${operatorWord} ${values.price}`],
@@ -171,8 +174,8 @@ function sliceSummary(values: FormValues): string {
 
 export default function CreateMandatePage() {
   const { address, provider, connect } = useWallet();
-  const price = useLivePrice(true);
   const [values, setValues] = useState<FormValues>(INITIAL_VALUES);
+  const price = useLivePrice(true, feedIdForPair(values.pair));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [phase, setPhase] = useState<Phase>("form");
   const [buttonStep, setButtonStep] = useState<ButtonStep>("seal");
@@ -196,6 +199,15 @@ export default function CreateMandatePage() {
     setValues((current) => ({ ...current, [field]: nextValue }));
   };
 
+  // A pair change clears the trigger price: the previous number lives on
+  // another scale (an XRP trigger makes no sense against BTC/USD).
+  const pickPair = (pair: SupportedPair): void => {
+    setValues((current) =>
+      current.pair === pair ? current : { ...current, pair, price: "" },
+    );
+    setErrors((current) => ({ ...current, price: undefined }));
+  };
+
   const blurField = (field: keyof FormValues): void => {
     setErrors((current) => ({
       ...current,
@@ -216,6 +228,7 @@ export default function CreateMandatePage() {
     setSubmitFailure(null);
     setSealedNow(true);
     const draft: MandateDraft = {
+      pair: values.pair,
       side: values.side,
       kind: values.kind,
       triggerOperator: values.op,
@@ -324,7 +337,18 @@ export default function CreateMandatePage() {
           {phase === "done" ? `Mandate #${createdMandateId} created` : "New mandate"}
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span className="chip chip-neutral">XRP/USD</span>
+          {phase === "form" ? (
+            <Menu
+              label={<span className="num">{values.pair}</span>}
+              buttonClassName="btn btn-quiet num"
+              ariaLabel="Trigger pair"
+              items={SUPPORTED_PAIRS.map((pair) => ({ value: pair, label: pair }))}
+              value={values.pair}
+              onPick={(pair) => pickPair(pair as SupportedPair)}
+            />
+          ) : (
+            <span className="chip chip-neutral">{values.pair}</span>
+          )}
           <span className="cap num" style={{ color: "var(--ink-2)", whiteSpace: "nowrap" }}>
             FTSO <Ticker value={formatPriceMicro(price.priceMicro)} />
           </span>
@@ -412,7 +436,8 @@ export default function CreateMandatePage() {
                   </div>
                 </div>
                 <p className={`cap${errors.price ? " err" : ""}`} style={{ marginTop: 8 }}>
-                  {errors.price ?? "Fires when the FTSO feed crosses this line."}
+                  {errors.price ??
+                    `Fires when the ${values.pair} FTSO feed crosses this line.`}
                 </p>
               </section>
 
@@ -756,7 +781,7 @@ export default function CreateMandatePage() {
                     value={
                       values.kind === "dca"
                         ? `every ${values.everySeconds} s`
-                        : `price ${values.op === "lte" ? "<=" : ">="} ${values.price}`
+                        : `${values.pair === "XRP/USD" ? "price" : values.pair} ${values.op === "lte" ? "<=" : ">="} ${values.price}`
                     }
                   />
                 </span>

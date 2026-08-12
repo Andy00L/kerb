@@ -43,8 +43,6 @@ interface Eip6963AnnounceEvent extends Event {
 declare global {
   interface Window {
     ethereum?: Eip1193Provider;
-    /** Phantom namespaces its EVM provider; it may skip EIP-6963. */
-    phantom?: { ethereum?: Eip1193Provider };
   }
 }
 
@@ -54,12 +52,11 @@ function isSafeIcon(candidate: unknown): candidate is string {
 }
 
 /**
- * Bundled official marks for wallets whose EIP-6963 announcement carries a
- * missing or untrusted icon, keyed by rdns.
+ * Wallets that cannot operate on Coston2 and are hidden from the picker:
+ * Phantom's EVM mode cannot add custom chains, so a connection through it
+ * can never sign a Kerb transaction.
  */
-const KNOWN_WALLET_ICONS: Readonly<Record<string, string>> = {
-  "app.phantom": "/wallets/phantom.png",
-};
+const EXCLUDED_RDNS: ReadonlySet<string> = new Set(["app.phantom"]);
 
 /**
  * Enumerate the wallets installed in this browser.
@@ -83,6 +80,7 @@ export function discoverWallets(): DetectedWallet[] {
       provider === undefined ||
       typeof info.rdns !== "string" ||
       typeof info.name !== "string" ||
+      EXCLUDED_RDNS.has(info.rdns) ||
       seenRdns.has(info.rdns)
     ) {
       return;
@@ -91,9 +89,7 @@ export function discoverWallets(): DetectedWallet[] {
     found.push({
       rdns: info.rdns,
       name: info.name,
-      icon: isSafeIcon(info.icon)
-        ? info.icon
-        : (KNOWN_WALLET_ICONS[info.rdns] ?? null),
+      icon: isSafeIcon(info.icon) ? info.icon : null,
       provider,
     });
   };
@@ -101,19 +97,6 @@ export function discoverWallets(): DetectedWallet[] {
   window.addEventListener("eip6963:announceProvider", recordAnnouncement);
   window.dispatchEvent(new Event("eip6963:requestProvider"));
   window.removeEventListener("eip6963:announceProvider", recordAnnouncement);
-
-  // Phantom versions that do not announce over EIP-6963 still expose
-  // window.phantom.ethereum; without this it degrades to "Browser wallet".
-  const phantomProvider = window.phantom?.ethereum;
-  if (!seenRdns.has("app.phantom") && phantomProvider !== undefined) {
-    seenRdns.add("app.phantom");
-    found.push({
-      rdns: "app.phantom",
-      name: "Phantom",
-      icon: "/wallets/phantom.png",
-      provider: phantomProvider,
-    });
-  }
 
   if (found.length === 0 && window.ethereum !== undefined) {
     // Pre-6963 wallet: present, but it does not identify itself.
@@ -131,8 +114,10 @@ export function discoverWallets(): DetectedWallet[] {
 }
 
 /**
- * Wallets proposed when none is installed. Real products, official sites;
- * the icons are the official brand marks, bundled under public/wallets/.
+ * Wallets proposed when none is installed. Real products that can add and
+ * sign on Coston2, official sites; the icons are the official brand marks,
+ * bundled under public/wallets/. Phantom is deliberately absent: its EVM
+ * mode cannot add custom chains.
  */
 export const WALLET_PROPOSALS: ReadonlyArray<{
   readonly name: string;
@@ -140,7 +125,6 @@ export const WALLET_PROPOSALS: ReadonlyArray<{
   readonly icon: string;
 }> = [
   { name: "MetaMask", url: "https://metamask.io/download/", icon: "/wallets/metamask.svg" },
-  { name: "Phantom", url: "https://phantom.com/download", icon: "/wallets/phantom.png" },
   { name: "Rabby", url: "https://rabby.io/", icon: "/wallets/rabby.png" },
   { name: "Brave Wallet", url: "https://brave.com/wallet/", icon: "/wallets/brave.svg" },
 ];

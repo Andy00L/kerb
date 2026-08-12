@@ -37,9 +37,45 @@ export type TriggerOperator = 'lte' | 'gte';
 export const PRICE_SCALE_DECIMALS = 12;
 export const PRICE_SCALE = 10n ** BigInt(PRICE_SCALE_DECIMALS);
 
-/** The trading pairs this build supports. */
-export const SUPPORTED_PAIRS = ['XRP/USD'] as const;
+/**
+ * The trigger pairs this build supports: the FTSOv2 block-latency feeds
+ * published on Coston2 (sourceRef: https://dev.flare.network/ftso/feeds).
+ * Execution is always XRP against the counter currency on the XRPL DEX; a
+ * non-XRP pair arms the trigger while the offers stay priced from XRP/USD.
+ */
+export const SUPPORTED_PAIRS = [
+  'XRP/USD',
+  'BTC/USD',
+  'ETH/USD',
+  'FLR/USD',
+  'SGB/USD',
+  'DOGE/USD',
+  'ADA/USD',
+  'ALGO/USD',
+  'SOL/USD',
+  'LTC/USD',
+  'XLM/USD',
+  'AVAX/USD',
+  'BNB/USD',
+  'POL/USD',
+  'TRX/USD',
+  'XDC/USD',
+  'FIL/USD',
+  'ARB/USD',
+] as const;
 export type SupportedPair = (typeof SUPPORTED_PAIRS)[number];
+
+/**
+ * Derive the 21 byte block-latency feed id for a pair: one category byte
+ * (01, Crypto) followed by the UTF-8 pair name, right zero padded.
+ */
+export function feedIdForPair(pair: SupportedPair): string {
+  let hex = '0x01';
+  for (const character of pair) {
+    hex += character.charCodeAt(0).toString(16).padStart(2, '0');
+  }
+  return hex.padEnd(44, '0');
+}
 
 /** A validated mandate: amounts are integer drops, prices are scaled integers. */
 export interface ValidatedMandate {
@@ -235,6 +271,12 @@ export function validateMandate(
     return {
       ok: false,
       reason: 'mandate.trigger.feedId: expected a lowercase 21 byte hex feed id',
+    };
+  }
+  if (feedId !== feedIdForPair(pair as SupportedPair)) {
+    return {
+      ok: false,
+      reason: 'mandate.trigger.feedId: does not match mandate.pair',
     };
   }
   const triggerOperator = trigger.op;

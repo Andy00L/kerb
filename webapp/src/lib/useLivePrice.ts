@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Live XRP/USD price hook.
+ * Live FTSOv2 price hook.
  *
- * Reads the real FTSOv2 block-latency feed over the public Coston2 RPC (an
+ * Reads the real block-latency feed over the public Coston2 RPC (an
  * eth_call costs nothing). When the RPC is unreachable the hook falls back to
  * a deterministic simulated walk so the demo keeps moving; `isSimulated`
  * says which one the viewer is looking at. All arithmetic is integral: the
@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPublicClient, http } from "viem";
 import { readAppConfig } from "./config";
+import { feedIdForPair } from "./feeds";
 
 /**
  * FtsoV2 on Coston2, resolved from FlareContractRegistry.
@@ -20,8 +21,8 @@ import { readAppConfig } from "./config";
  */
 const FTSO_V2_ADDRESS = "0xC4e9c78EA53db782E28f28Fdf80BaF59336B304d";
 
-/** XRP/USD block-latency feed id (category 01 + "XRP/USD" right padded). */
-const XRP_USD_FEED_ID = "0x015852502f55534400000000000000000000000000";
+/** XRP/USD block-latency feed id, the default when no feed is passed. */
+const XRP_USD_FEED_ID = feedIdForPair("XRP/USD");
 
 const FTSO_V2_ABI = [
   {
@@ -59,7 +60,10 @@ function scaleToMicro(value: bigint, decimals: number): bigint {
   return value / 10n ** BigInt(-shift);
 }
 
-export function useLivePrice(enabled: boolean): LivePrice {
+export function useLivePrice(
+  enabled: boolean,
+  feedId: `0x${string}` = XRP_USD_FEED_ID,
+): LivePrice {
   const [priceMicro, setPriceMicro] = useState<bigint>(SIMULATED_START_MICRO);
   const [openMicro, setOpenMicro] = useState<bigint>(0n);
   const [flash, setFlash] = useState(false);
@@ -71,6 +75,9 @@ export function useLivePrice(enabled: boolean): LivePrice {
     if (!enabled) {
       return;
     }
+    // A feed change restarts the session: the open re-seeds from the first
+    // reading of the new feed instead of carrying the previous pair's.
+    setOpenMicro(0n);
     const { chainUrl } = readAppConfig();
     const client = createPublicClient({ transport: http(chainUrl) });
     let disposed = false;
@@ -99,7 +106,7 @@ export function useLivePrice(enabled: boolean): LivePrice {
           address: FTSO_V2_ADDRESS,
           abi: FTSO_V2_ABI,
           functionName: "getFeedById",
-          args: [XRP_USD_FEED_ID],
+          args: [feedId],
         });
         applyReading(scaleToMicro(value, decimals), false);
       } catch {
@@ -120,7 +127,7 @@ export function useLivePrice(enabled: boolean): LivePrice {
       clearInterval(interval);
       clearTimeout(flashTimer);
     };
-  }, [enabled]);
+  }, [enabled, feedId]);
 
   return { priceMicro, openMicro, flash, isSimulated };
 }
