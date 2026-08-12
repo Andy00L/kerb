@@ -1151,11 +1151,33 @@ input::placeholder {
 }
 
 .hero-h {
-  font-size: 56px;
+  font-size: clamp(44px, 7.5vw, 104px);
   font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
   text-wrap: pretty;
+}
+
+/* Campaign-style masked text rise: each line lifts out of an overflow mask. */
+.animmask {
+  display: block;
+  overflow: hidden;
+}
+
+.animseg {
+  display: inline-block;
+  animation: textrise 914ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes textrise {
+  from {
+    transform: translateY(0.6em);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
 }
 
 .ctas {

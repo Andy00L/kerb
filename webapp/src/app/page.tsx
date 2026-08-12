@@ -142,7 +142,7 @@ export default function LandingPage() {
             alignItems: "center",
           }}
         >
-          <div style={{ maxWidth: 560 }}>
+          <div style={{ maxWidth: 760 }}>
             <div className="rise" style={{ animationDelay: "30ms" }}>
               <span
                 className="chip"
@@ -154,20 +154,27 @@ export default function LandingPage() {
                 Non-custodial | XRPL DEX | Flare TEE
               </span>
             </div>
-            <h1
-              className="hero-h rise"
-              style={{ animationDelay: "60ms", marginTop: 20, color: "var(--on-paper)" }}
-            >
-              Your exit plan, sealed.
+            <h1 className="hero-h" style={{ marginTop: 24, color: "var(--on-paper)" }}>
+              <span className="animmask">
+                <span className="animseg" style={{ animationDelay: "80ms" }}>
+                  Your exit plan,
+                </span>
+              </span>
+              <span className="animmask">
+                <span className="animseg" style={{ animationDelay: "180ms" }}>
+                  sealed.
+                </span>
+              </span>
             </h1>
             <p
               className="rise"
               style={{
-                animationDelay: "90ms",
-                fontSize: 17,
+                animationDelay: "260ms",
+                fontSize: 20,
+                lineHeight: 1.45,
                 color: "var(--on-paper-2)",
-                margin: "16px 0 0",
-                maxWidth: 480,
+                margin: "20px 0 0",
+                maxWidth: 540,
                 textWrap: "pretty",
               }}
             >
@@ -177,8 +184,8 @@ export default function LandingPage() {
             <div
               className="rise"
               style={{
-                animationDelay: "120ms",
-                marginTop: 28,
+                animationDelay: "340ms",
+                marginTop: 32,
                 display: "flex",
                 alignItems: "center",
                 gap: 20,
@@ -435,18 +442,25 @@ export default function LandingPage() {
               padding: "64px 24px",
             }}
           >
-            <div style={{ maxWidth: 520 }}>
+            <div style={{ maxWidth: 640 }}>
               <h2
                 style={{
-                  fontSize: 40,
+                  fontSize: "clamp(36px, 4.5vw, 56px)",
                   fontWeight: 500,
-                  letterSpacing: "-0.01em",
-                  lineHeight: 1.15,
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.08,
                   color: "var(--on-paper)",
                   textWrap: "pretty",
                 }}
               >
-                It watches the price so you can look away.
+                <span className="animmask">
+                  <span className="animseg">It watches the price</span>
+                </span>
+                <span className="animmask">
+                  <span className="animseg" style={{ animationDelay: "100ms" }}>
+                    so you can look away.
+                  </span>
+                </span>
               </h2>
               <p
                 style={{
